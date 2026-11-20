@@ -1,0 +1,17 @@
+{% load search_extras %}
+{% if agency.status == "not_searched" %}
+  <p class="note">{{ agency.reason }}</p>
+{% else %}
+  {% if agency.status == "not_found" %}<p class="warn">No collecting agency was identified.</p>{% endif %}
+  <dl>
+    <dt>Agency</dt><dd><strong>{{ agency.agency_name|default:"not found" }}</strong></dd>
+    <dt>Office / payment address</dt><dd>{{ agency.payment_address|default:"not given" }}</dd>
+    <dt>Portal</dt><dd>{{ agency.portal_url|default:"not given" }}</dd>
+    <dt>Validated</dt><dd>{% if agency.validated %}<span class="good">yes</span>{% else %}<span class="warn">no</span>{% endif %} (basis: {{ agency.basis|spaced }})</dd>
+    <dt>Collector model</dt><dd>{{ agency.collector_model }}</dd>
+    <dt>Taxing bodies on the statement</dt><dd>{{ agency.levying_bodies|join:", "|default:"none listed" }}</dd>
+    <dt>Separate collectors</dt><dd>{{ agency.separate_collectors|join:", "|default:"none reported" }}</dd>
+  </dl>
+  {% for check in agency.checks %}<p class="note">{{ check }}</p>{% endfor %}
+  {% if agency.notes %}<p class="note">{{ agency.notes }}</p>{% endif %}
+{% endif %}

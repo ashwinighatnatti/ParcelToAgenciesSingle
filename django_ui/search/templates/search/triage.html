@@ -1,0 +1,74 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Triage a batch</h1>
+<p class="sub">Sorts a batch into <strong>simple</strong> (easily accessible), <strong>medium</strong> (few steps) and <strong>complex</strong> before you run it.
+This is not a search: it makes <strong>no Claude call and costs $0</strong>. It uses one Census batch geocoder request (is each address real, and in which county?),
+whether the county has a scripted adapter, and whether the state has one tax office or several.</p>
+<div class="box"><strong>How a row is classified.</strong>
+<strong>Simple:</strong> the address matches and the county has an adapter (parcel and agency read from the county's own records).
+<strong>Medium:</strong> no adapter, but the state has one county-level collector (web research, 2 searches).
+<strong>Complex:</strong> the address does not match the Census geocoder, or the state has several collectors.
+The state classification is the draft in <code>jurisdictions_config.json</code>; it still needs checking with Operations.
+Estimated full-run costs come from runs already made: about $0.015 per adapter row, about $0.85 per web-research row, $0 for an address that does not match
+(the full run stops there). They are estimates, not guarantees.</div>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.csv_file.label_tag }}{{ form.csv_file }}{{ form.csv_file.errors }}
+  {{ form.lines.label_tag }}{{ form.lines }}{{ form.lines.errors }}
+  {{ form.first_rows.label_tag }}{{ form.first_rows }}{{ form.first_rows.errors }}
+  <button type="submit">Triage batch</button>
+</form>
+{% if result %}
+{% with total=result.summary.total notes=result.summary.notes run=result.summary.triage_run %}
+<h2>Summary</h2>
+<p><a href="{% url 'triage_csv' token %}">Download the full triage as CSV</a> (one row per address, with its level and the reason).</p>
+<div class="tablewrap"><table>
+  <tr><th>Level</th><th>Rows</th><th>Share</th><th>Estimated cost of a full run</th></tr>
+  {% for key, label, route, s, rows in levels %}
+  <tr><td><strong>{{ key|title }}</strong> ({{ label }})</td><td>{{ s.rows }}</td><td>{{ s.share_pct }}%</td><td>${{ s.full_run_estimate_usd }}</td></tr>
+  {% endfor %}
+  <tr><td><strong>Total</strong></td><td>{{ total.rows }}</td><td>100%</td><td><strong>about ${{ total.full_run_estimate_usd }}</strong></td></tr>
+</table></div>
+<p>Cost of this triage run: <strong>${{ run.cost_usd }}</strong> ({{ run.claude_calls }} Claude calls, {{ run.tokens }} tokens,
+{{ run.census_batch_requests }} free Census request, {{ run.seconds }} s).</p>
+
+<h2>What each level means for a full run</h2>
+<div class="tablewrap"><table>
+  <tr><th>Level</th><th>Steps a full run takes</th></tr>
+  {% for key, label, route, s, rows in levels %}<tr><td><strong>{{ key|title }}</strong></td><td>{{ route }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Why the rows got their level</h2>
+<div class="tablewrap"><table>
+  <tr><th>Reason</th><th>Level</th><th>Rows</th><th>Estimated full run</th></tr>
+  {% for c in result.summary.causes %}<tr><td>{{ c.cause }}</td><td>{{ c.level|title }}</td><td>{{ c.rows }}</td><td>${{ c.full_run_estimate_usd }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>By state</h2>
+<div class="tablewrap"><table>
+  <tr><th>State</th><th>Rows</th><th>Simple</th><th>Medium</th><th>Complex</th></tr>
+  {% for s in result.summary.by_state %}<tr><td>{{ s.state }}</td><td>{{ s.rows }}</td><td>{{ s.simple }}</td><td>{{ s.medium }}</td><td>{{ s.complex }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Things to know before acting on this</h2>
+<ul>
+  <li>{{ total.rows }} rows, {{ notes.with_parcel_id }} with a parcel ID, in {{ notes.distinct_counties }} counties that the Census matched. Triage does not look at the parcel ID.</li>
+  <li>{{ notes.unmatched_with_parcel_id }} of the rows whose address the Census did not match have a parcel ID. Fix the address, or add a state and county to search them by parcel ID.</li>
+  <li>Cost estimates: ${{ notes.adapter_cost_each }} for each adapter row and ${{ notes.web_cost_each }} for each web-research row, from runs already made;
+      $0 for an address that does not match (the full run stops at the address check). They are estimates, not guarantees.</li>
+  <li>Complex does not mean it will fail: it means more than one office may bill, or the address could not be checked, so expect a manual review.
+      The state classification is a draft (<code>jurisdictions_config.json</code>) that has not been checked with Operations or against real run results.</li>
+</ul>
+
+<h2>Rows by level</h2>
+{% for key, label, route, s, rows in levels %}
+<details{% if key == "simple" %} open{% endif %}><summary><strong>{{ key|title }}</strong> ({{ label }}): {{ s.rows }} rows</summary>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Address</th><th>Parcel ID</th><th>State</th><th>Why</th><th>Est. full run</th></tr>
+  {% for r in rows %}<tr><td>{{ r.row }}</td><td>{{ r.address }}</td><td>{{ r.parcel_id }}</td><td>{{ r.state }}</td><td>{{ r.reason }}</td><td>${{ r.full_run_estimate_usd }}</td></tr>{% endfor %}
+</table></div></details>
+{% endfor %}
+{% endwith %}
+{% endif %}
+{% endblock %}

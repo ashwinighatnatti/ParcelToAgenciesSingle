@@ -1,0 +1,17 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Batch</h1>
+<p class="sub">Run several searches one after another as a single job. With 10 or more addresses the Census batch geocoder is used.
+Up to 200 searches. When the job finishes, download the results as a CSV.</p>
+<div class="box"><strong>File format.</strong> One search per line, no header: <code>parcel address|parcel ID</code>, for example
+<code>11205 TINDALL RD, ORLANDO, FL 32832|2824310000 00026</code> (the parcel ID may be left out).
+A CSV with a header row (<code>address,parcel_id,state,county</code>) also works, and is the way to search by parcel ID alone.</div>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.csv_file.label_tag }}{{ form.csv_file }}{{ form.csv_file.errors }}
+  {{ form.lines.label_tag }}{{ form.lines }}{{ form.lines.errors }}
+  {{ form.first_rows.label_tag }}{{ form.first_rows }}{{ form.first_rows.errors }}
+  <button type="submit">Run batch</button>
+</form>
+{% endblock %}

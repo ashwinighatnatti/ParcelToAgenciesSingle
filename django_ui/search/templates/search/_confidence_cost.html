@@ -1,0 +1,24 @@
+{% load search_extras %}
+<section class="stage"><h3>Confidence</h3>
+  <p><strong class="{% if result.confidence.level == 'high' %}good{% elif result.confidence.level == 'medium' %}warn{% else %}bad{% endif %}">{{ result.confidence.score }} / 100 ({{ result.confidence.level }})</strong>
+     <span class="note">{{ result.confidence.summary }}</span></p>
+  <div class="tablewrap"><table>
+    <tr><th>Evidence</th><th>Points</th><th>Why</th></tr>
+    {% for f in result.confidence.factors %}
+    <tr><td>{{ f.factor }}</td><td>{{ f.points }}{% if f.possible %} / {{ f.possible }}{% endif %}</td><td>{{ f.why }}</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+<section class="stage"><h3>Cost of this search</h3>
+  <p><strong>${{ result.cost.total_usd|floatformat:4 }}</strong>
+     <span class="note">{{ result.cost.claude_calls }} Claude call{{ result.cost.claude_calls|pluralize }},
+     {{ result.cost.input_tokens }} input and {{ result.cost.output_tokens }} output tokens, {{ result.cost.web_searches }} web search{{ result.cost.web_searches|pluralize:"es" }}</span></p>
+  <div class="tablewrap"><table>
+    <tr><th>Stage</th><th>Claude calls</th><th>Input tokens</th><th>Output tokens</th><th>Web searches</th><th>Cost</th></tr>
+    {% for name, c in result.cost.by_stage.items %}
+    <tr><td>{{ name|spaced }}</td><td>{{ c.claude_calls }}</td><td>{{ c.input_tokens }}</td><td>{{ c.output_tokens }}</td><td>{{ c.web_searches }}</td><td>${{ c.total_usd|floatformat:4 }}</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="note">Priced at ${{ result.cost.prices.input_per_mtok }} per million input tokens, ${{ result.cost.prices.output_per_mtok }} per million output tokens and
+  ${{ result.cost.prices.web_search_each }} per web search. Census, TIGERweb and county map services are free.</p>
+</section>

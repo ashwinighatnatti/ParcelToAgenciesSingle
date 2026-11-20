@@ -1,0 +1,53 @@
+{% extends "search/base.html" %}
+{% block title %}{{ job.title }}{% endblock %}
+{% block content %}
+<h1>{{ job.title }}</h1>
+<p class="sub">Started {{ job.created|date:"Y-m-d H:i:s" }} UTC{% if job.finished %}, finished {{ job.finished|date:"H:i:s" }}{% endif %}</p>
+
+{% if job.status == "running" %}
+  <div class="box">
+    <p><span class="spinner"></span><strong>Searching…</strong> <span id="elapsed">0</span> s elapsed</p>
+    <p class="note">Validating the address, finding the parcel and identifying the agency. This page updates by itself when the search finishes.</p>
+  </div>
+{% elif job.status == "failed" %}
+  <div class="banner bad"><strong>The search failed.</strong></div>
+  <pre>{{ job.error }}</pre>
+  <p><a href="{% url 'index' %}">Start another search</a></p>
+{% elif result %}
+  <p><a class="button" href="{% url 'job_audit' job.pk %}">Download audit file (Excel)</a></p>
+  {% include "search/_result.html" %}
+  <p><a href="{% url 'index' %}">Start another search</a></p>
+{% else %}
+  <p class="note">{{ job.results|length }} searches.
+    <a class="button" href="{% url 'job_results' job.pk %}">Download results (CSV)</a>
+    <a class="button" href="{% url 'job_audit' job.pk %}">Download audit file (Excel)</a></p>
+  <div class="tablewrap"><table>
+    <tr><th>Search</th><th>Status</th><th>Parcel ID</th><th>Parcel address</th><th>Agency</th><th>Bill</th></tr>
+    {% for r in job.results %}
+    <tr>
+      <td>{{ r.query.address|default:r.query.parcel_id }}</td><td>{{ r.status }}</td>
+      <td>{{ r.parcel.parcel_id|default:"" }}</td><td>{{ r.parcel.parcel_address|default:"" }}</td>
+      <td>{{ r.agency.agency_name|default:"" }}</td><td>{% if r.tax_bill.available %}yes{% else %}no{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% for r in job.results %}
+    <details><summary>{{ forloop.counter }}. {{ r.query.address|default:r.query.parcel_id }} ({{ r.status }})</summary>
+      {% include "search/_result.html" with result=r %}
+    </details>
+  {% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if job.status == "running" %}
+<script>
+  // Poll the job; reload to show the result as soon as it is no longer running.
+  const timer = setInterval(async () => {
+    const data = await (await fetch("{% url 'job_status' job.pk %}")).json();
+    document.getElementById("elapsed").textContent = data.elapsed;
+    if (data.status !== "running") { clearInterval(timer); location.reload(); }
+  }, 3000);
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% if not check.checked %}
+  <p class="note">{{ check.reason }}</p>
+{% elif not check.valid %}
+  <p class="bad">{{ check.reason }}</p>
+{% else %}
+  <dl>
+    <dt>Normalized address</dt><dd>{{ check.normalized_address }}</dd>
+    <dt>State / county</dt><dd>{{ check.state }} / {{ check.county }} (code {{ check.county_code }})</dd>
+    <dt>City</dt><dd>{{ check.city|join:", "|default:"none (unincorporated)" }}</dd>
+    <dt>School district</dt><dd>{{ check.school_districts|join:", "|default:"none found" }}</dd>
+  </dl>
+  <p class="note">{{ check.note }}</p>
+{% endif %}
+{% for flag in check.flags %}<p class="warn">{{ flag }}</p>{% endfor %}

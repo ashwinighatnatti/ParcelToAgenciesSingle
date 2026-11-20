@@ -1,0 +1,40 @@
+10241-10275 NORTH FREEWAY, HOUSTON, TX | parcel 1176470010007
+  expected    : ['Aldine ISD (Harris)', 'Fallbrook UD (Harris)', 'Harris County', 'North Houston District', 'North Houston District (Harris)']
+  matched to  : ['Aldine ISD (Harris)', 'Harris County']
+  expected 5, found 2, correct 2  (recall 40%, precision 100%)
+1507 ELGIN AVE, HOUSTON, TX | parcel 1355270010003
+  expected    : ['Harris County', 'Midtown Management District  (Harris)', 'Spring Branch ISD (Harris)', 'Spring Branch Management District (Harris)']
+  matched to  : ['Harris County', 'Humble ISD (Harris)', 'Midtown Management District  (Harris)']
+  expected 4, found 3, correct 2  (recall 50%, precision 67%)
+8559 SPRING GREEN DR, HOUSTON, TX | parcel 1153850430041
+  expected    : ['Cypress-Fairbanks ISD (Harris)', 'HC MUD 163 (Harris)', 'HC WCID 145 (Harris)', 'Harris County']
+  matched to  : ['Cypress-Fairbanks ISD (Harris)', 'HC MUD 162 (Harris)', 'HC WCID 145 (Harris)', 'Harris County']
+  expected 4, found 4, correct 3  (recall 75%, precision 75%)
+3225 RAYMOND ST, READING, PA | parcel 57531806296731
+  expected    : ['Berks County Treasurer (Adamstown Boro, New Morgan Boro, Reading City)', 'Laureldale Borough (Berks)', 'Muhlenberg SD (Laureldale Borough)', 'Reading City (Berks) - Inactive - See Reading City (Berks Co/Reading City)', 'Reading SD (Reading City)']
+  matched to  : ['Berks County (Delinquent Tax Only)', 'Muhlenberg SD (Muhlenberg Township)', 'Muhlenberg Township (Berks)']
+  expected 5, found 3, correct 0  (recall 0%, precision 0%)
+12989 Half moon Road, Wattsburg, PA | parcel 44011014001302
+  expected    : ['Venango Township (Erie)', 'Wattsburg Area SD (Venango Township)', 'Wattsburg Area SD (Wattsburg Borough)', 'Wattsburg Borough (Erie)']
+  matched to  : ['Erie County  (Delinquent Reporting Only)', 'Venango Township (Erie)', 'Wattsburg Area SD (Venango Township)']
+  expected 4, found 3, correct 2  (recall 50%, precision 67%)
+42925 Route 6, Columbus , PA | parcel CY-3-8249
+  expected    : ['Columbus Township (Warren)', 'Corry Area SD (Columbus Township)', 'Warren County', 'Warren County (Delinquent Reporting Only)(Tax Claim)']
+  matched to  : ['Columbus Township (Warren)', 'Corry Area SD (Columbus Township)', 'Warren County']
+  expected 4, found 3, correct 3  (recall 75%, precision 100%)
+706 BUOY RD, HOUSTON, TX | parcel 1003390000002
+  expected    : ['Clear Creek ISD-Harris (League City/Friendswood City)', 'Clear Lake City WA (Harris)', 'HC WCID 156 (Harris)', 'Harris County']
+  matched to  : ['Clear Creek ISD-Harris (League City/Friendswood City)', 'Clear Lake City WA (Harris)', 'Harris County']
+  expected 4, found 3, correct 3  (recall 75%, precision 100%)
+238 Chappell Grove LN, Chappell Hill, TX | parcel 67821
+  expected    : ['Austin CAD', 'Burton City (Washington)', 'Burton ISD (Washington)', 'Washington CAD']
+  matched to  : ['Washington County']
+  expected 4, found 1, correct 0  (recall 0%, precision 0%)
+2218 2ND ST, EASTON, PA | parcel M9NW2D 3 12A 0837
+  expected    : ['Northampton County', 'Northampton County Tax Claim Bureau', 'Portnoff Law Associates, Ltd.', 'Wilson Area SD (Wilson Borough)', 'Wilson Borough (Northampton)']
+  matched to  : ['Northampton County', 'Wilson Area SD (Wilson Borough)', 'Wilson Borough (Northampton)']
+  expected 5, found 3, correct 3  (recall 60%, precision 100%)
+329 Commerce St, Corning, NY | parcel 460300 318.39-01-042.000
+  expected    : ['Corning City  (County Billing)  (Steuben)', 'Corning City (Steuben)', 'Corning-Painted Post SD (Corning City,Bradford Town, Campbell Town, Caton Town,  Corning Town, Erwin Town, Hornby Town, Lindley Town,  Painted Post Village)', 'Steuben County  Delinquent Taxes Only']
+  matched to  : ['Corning City  (County Billing)  (Steuben)', 'Corning City (Steuben)', 'Corning-Painted Post SD (Corning City,Bradford Town, Campbell Town, Caton Town,  Corning Town, Erwin Town, Hornby Town, Lindley Town,  Painted Post Village)', 'Steuben County  Delinquent Taxes Only']
+  expected 4, found 4, correct 4  (recall 100%, precision 100%)

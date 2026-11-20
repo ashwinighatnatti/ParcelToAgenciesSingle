@@ -1,0 +1,33 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Find the tax collecting agency</h1>
+<p class="sub">Start from a parcel address, a parcel ID, or both. Three stages run in order: validate the address, find and validate the parcel,
+find and validate the agency. A county with an adapter takes about a minute; other counties are researched by Claude on the web and can take a few minutes.</p>
+{% include "search/_search_form.html" with button="Search" %}
+<p class="note" style="margin-top:22px">Try: <code>400 Broad St, Seattle, WA 98109</code> (a bill) ·
+<code>4800 Ravenna Ave NE, Seattle, WA 98105</code> (no such parcel; the nearest are suggested) ·
+<code>721 Pine St, Seattle, WA 98101</code> (three parcels) · parcel <code>118-50-094</code>, state AZ, county Maricopa.</p>
+
+<h2>How an answer is arrived at</h2>
+<div class="box">
+  <p><strong>The trajectory.</strong> Every search records each step it takes. The result page summarises it by stage and lists every step, every website
+  touched and every web search Claude ran. The <em>audit file</em> (Excel, on every result page) holds the same detail for checking.</p>
+  <ol>
+    <li><strong>Validate the address</strong>: US Census Geocoder matches it; Census TIGERweb gives the county, city and school districts.</li>
+    <li><strong>Find / validate the parcel</strong>: Maricopa AZ and King WA are searched in the county's own GIS records; every other county is researched by Claude on the web.</li>
+    <li><strong>Find / validate the agency</strong>: for Maricopa AZ and King WA the county's tax statement page is opened, Claude reads the agency and the code checks the parcel number is on the page;
+        for every other county Claude researches it on the web, so the answer is marked unverified.</li>
+  </ol>
+</div>
+<div class="box">
+  <p><strong>The confidence score</strong> (0 to 100) is the points earned for the evidence at each stage, divided by the points possible. A parcel ID search has no address to check, so the
+  address points are left out. If no agency is found the score is 0. Levels: {{ levels }}. The weights are a judgement, not a statistical calibration.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Evidence</th><th>Situation</th><th>Points</th></tr>
+    {% for r in rules %}<tr><td>{{ r.evidence }}</td><td>{{ r.situation }}</td><td>{{ r.points }}{% if r.possible %} of {{ r.possible }}{% endif %}</td></tr>{% endfor %}
+  </table></div>
+</div>
+<div class="box">
+  <p><strong>The ranking.</strong> {{ ranking_rule }} The <a href="{% url 'rank' %}">Rank states</a> tab is separate: it ranks whole states by how few portals cover most homes.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+  string prompt = $"Identify and list *all * governmental and quasi-governmental entities that levy property taxes for the property located at {ParcelAddress} and if parcel number exists use parcel number {parcelNumber} .Provide only the names in a clean list, without any additional explanation";
+//                            string parcelLine = !string.IsNullOrWhiteSpace(parcelNumber)
+//                                ? $"Parcel Number: {parcelNumber}"
+//                                : "Parcel Number: Data Unavailable";
+ 
+//                            string prompt = $@"
+//You are an expert real estate data extraction assistant. Your task is to analyze property parcel information and identify the local property tax collecting agencies, upcoming tax deadlines, and recent tax amounts. You must account for state-specific tax structures (for example, separate town, county, village, and school taxes in states like New York).
+ 
+//For the following Parcel Address and Parcel Number, provide:
+//- The name(s) of the specific local agencies that collect the taxes.
+//- The next upcoming due dates for these taxes, specifying whether each is penalty-free or late.
+//- The most recently available annual tax amount.
+//- Notes about jurisdictional quirks, such as split village/town/school/county taxes.
+ 
+//Return the results strictly in this JSON format:
+//{{
+//  ""agencies"": [""Agency 1"", ""Agency 2""],
+//  ""due_dates"": [
+//    {{
+//      ""tax_type"": ""type"",
+//      ""date"": ""YYYY-MM-DD"",
+//      ""status"": ""penalty-free/late""
+//    }}
+//  ],
+//  ""recent_amount"": ""Amount or 'Data Unavailable'"",
+//  ""notes"": ""Any jurisdictional quirks, like split village/town taxes.""
+//}}
+ 
+//Important rules:
+//- Return JSON only.
+//- No extra text.
+//- No markdown.
+//- If data is missing, use ""Data Unavailable"".
+//- Prefer parcel-number-based matching when parcel number is provided.
+ 
+//Parcel Address: {ParcelAddress}
+//{parcelLine}
+//";

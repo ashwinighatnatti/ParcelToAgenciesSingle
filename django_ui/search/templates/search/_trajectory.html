@@ -1,0 +1,33 @@
+{% load search_extras %}
+<section class="stage"><h3>Trajectory: how this answer was reached</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Stage</th><th>Steps</th><th>What happened</th></tr>
+    {% for s in result.audit.by_stage %}<tr><td>{{ s.stage }}</td><td>{{ s.steps }}</td><td>{{ s.summary }}</td></tr>{% endfor %}
+  </table></div>
+  <details><summary>Every step ({{ result.audit.steps|length }})</summary>
+    <div class="tablewrap"><table>
+      <tr><th>#</th><th>Source</th><th>Action</th><th>Asked</th><th>Result</th></tr>
+      {% for s in result.audit.steps %}
+      <tr><td>{{ s.n }}</td>
+          <td>{{ s.source }}{% if s.url %}<br><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url|truncatechars:60 }}</a>{% endif %}</td>
+          <td>{{ s.action }}{% if s.kind == "claude" %}<br><span class="note">{{ s.input_tokens }} in / {{ s.output_tokens }} out tokens, ${{ s.cost_usd|floatformat:4 }}</span>{% endif %}</td>
+          <td>{{ s.request }}</td><td>{{ s.outcome }}</td></tr>
+      {% endfor %}
+    </table></div>
+  </details>
+  <details><summary>Websites touched ({{ result.audit.websites|length }})</summary>
+    <div class="tablewrap"><table>
+      <tr><th>Step</th><th>Website</th><th>Title</th><th>How it was used</th></tr>
+      {% for w in result.audit.websites %}
+      <tr><td>{{ w.step }}</td><td><a href="{{ w.url }}" target="_blank" rel="noopener">{{ w.url|truncatechars:80 }}</a></td><td>{{ w.title }}</td><td>{{ w.how }}</td></tr>
+      {% endfor %}
+    </table></div>
+  </details>
+  <details><summary>Claude's web searches ({{ result.audit.web_searches|length }})</summary>
+    {% for q in result.audit.web_searches %}
+      <p><strong>Step {{ q.step }}: {{ q.query }}</strong></p>
+      <ul>{% for u in q.results %}<li><a href="{{ u }}" target="_blank" rel="noopener">{{ u|truncatechars:90 }}</a></li>{% endfor %}</ul>
+    {% empty %}<p class="note">Claude ran no web search for this answer.</p>{% endfor %}
+    {% if result.audit.web_searches %}<p class="note">The results listed are everything the Claude call received; the API does not say which result came from which query.</p>{% endif %}
+  </details>
+</section>

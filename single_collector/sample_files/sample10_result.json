@@ -1,0 +1,587 @@
+[
+  {
+    "status": "found_unverified",
+    "reason": null,
+    "query": {
+      "address": "11205 TINDALL RD, ORLANDO, FL 32832",
+      "parcel_id": "28-24-31-0000-00026",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "11205 TINDALL RD, ORLANDO, FL, 32832",
+      "street": "11205 TINDALL RD",
+      "city_name": "ORLANDO",
+      "state": "FL",
+      "zip": "32832",
+      "county": "Orange County",
+      "county_code": "12095",
+      "coordinates": {
+        "x": -81.224433136347,
+        "y": 28.363542345471
+      },
+      "city": [],
+      "school_districts": [
+        "Orange County School District"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "12095",
+      "county": "Orange County",
+      "state": "FL",
+      "status": "matched",
+      "parcel_id": "28-24-31-0000-00-026",
+      "parcel_address": "11205 Tindall Rd, Orlando, FL 32832",
+      "full_address": "11205 Tindall Rd, Orlando, FL 32832",
+      "verified": false,
+      "source": "claude_search",
+      "parcel_id_source": "third_party",
+      "candidates": [],
+      "reason": null
+    },
+    "agency": {
+      "status": "found",
+      "validated": false,
+      "basis": "claude_search",
+      "agency_name": "Orange County Tax Collector (Scott Randolph)",
+      "payment_address": "Orange County Tax Collector, P.O. Box 545100, Orlando, FL 32854",
+      "portal_url": "https://county-taxes.net/fl-orange/property-tax",
+      "separate_collectors": [],
+      "levying_bodies": [
+        "Orange County Board of County Commissioners",
+        "Orange County Public Schools (School Board)",
+        "Orange County Library District",
+        "St. Johns River Water Management District",
+        "Unincorporated County Taxing District (MSTU)",
+        "Orange County Fire and EMS MSTU"
+      ],
+      "collector_model": "single",
+      "tax_year": null,
+      "checks": [
+        "The agency comes from web research, not from the county statement."
+      ],
+      "notes": "Direct bill PDF URL not available without an interactive parcel lookup on the county-taxes.net portal; parcel ID confirmed from third-party listings since the OCPA site was not directly accessible."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no public bill link, parcel id or tax year was found"
+    },
+    "flags": [
+      "The parcel number comes from a third-party source and is not verified against county records."
+    ]
+  },
+  {
+    "status": "success",
+    "reason": null,
+    "query": {
+      "address": "12515 West Windsor Boulevard, LITCHFIELD PARK, AZ 85340",
+      "parcel_id": "508-12-628",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "12515 W WINDSOR BLVD, LITCHFIELD PARK, AZ, 85340",
+      "street": "12515 W WINDSOR BLVD",
+      "city_name": "LITCHFIELD PARK",
+      "state": "AZ",
+      "zip": "85340",
+      "county": "Maricopa County",
+      "county_code": "04013",
+      "coordinates": {
+        "x": -112.328614376677,
+        "y": 33.509915441492
+      },
+      "city": [],
+      "school_districts": [
+        "Agua Fria Union High School District",
+        "Litchfield Elementary District"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "04013",
+      "county": "Maricopa County",
+      "state": "AZ",
+      "status": "matched",
+      "parcel_id": "508-12-628",
+      "parcel_address": "12515 W WINDSOR BLVD",
+      "full_address": "12515 W WINDSOR BLVD, LITCHFIELD PARK, AZ 85340",
+      "verified": true,
+      "source": "county_gis",
+      "candidates": [],
+      "reason": null,
+      "address_matches_input": true
+    },
+    "agency": {
+      "status": "found",
+      "validated": true,
+      "basis": "statement_page",
+      "agency_name": "Maricopa County - Treasurer's Office",
+      "payment_address": "301 W. Jefferson St. Suite 100, Phoenix, AZ 85003",
+      "portal_url": "https://treasurer.maricopa.gov",
+      "separate_collectors": [],
+      "levying_bodies": [],
+      "collector_model": "unknown",
+      "tax_year": "2026",
+      "checks": [
+        "The parcel number appears on the county statement.",
+        "The statement is for tax year 2026."
+      ],
+      "notes": "The page does not itemize individual taxing bodies or list any separate collectors."
+    },
+    "tax_bill": {
+      "available": true,
+      "tax_year": "2026",
+      "file_path": "downloads\\AZ\\Maricopa_County\\508-12-628_2026_bill.pdf"
+    },
+    "flags": []
+  },
+  {
+    "status": "county_needed",
+    "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address.",
+    "query": {
+      "address": "22095 Quickstep Ct NW, Poulsbo, WA 98370",
+      "parcel_id": "102601-2-057-2001",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": false,
+      "flags": [],
+      "reason": "The Census geocoder found no match for this address."
+    },
+    "parcel": {
+      "status": "county_needed",
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "agency": {
+      "status": "not_searched",
+      "validated": false,
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no agency search was made"
+    },
+    "flags": []
+  },
+  {
+    "status": "parcel_not_found",
+    "reason": "The web search did not find a parcel number.",
+    "query": {
+      "address": "115 Holly Park Street, Longview, WA 98632",
+      "parcel_id": null,
+      "state": null,
+      "county": null,
+      "search_mode": "address"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "115 HOLLY PARK ST, LONGVIEW, WA, 98632",
+      "street": "115 HOLLY PARK ST",
+      "city_name": "LONGVIEW",
+      "state": "WA",
+      "zip": "98632",
+      "county": "Cowlitz County",
+      "county_code": "53015",
+      "coordinates": {
+        "x": -122.989034437053,
+        "y": 46.156663182875
+      },
+      "city": [],
+      "school_districts": [
+        "Longview Public Schools"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "53015",
+      "county": "Cowlitz County",
+      "state": "WA",
+      "status": "not_found",
+      "verified": false,
+      "source": "claude_search",
+      "candidates": [],
+      "reason": "The web search did not find a parcel number."
+    },
+    "agency": {
+      "status": "not_found",
+      "validated": false,
+      "basis": "county_level_search",
+      "agency_name": null,
+      "payment_address": null,
+      "portal_url": null,
+      "separate_collectors": [],
+      "levying_bodies": [],
+      "collector_model": "unknown",
+      "tax_year": null,
+      "checks": [
+        "No single parcel was matched, so this is the agency for the county, not confirmed for a parcel."
+      ],
+      "notes": ""
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no single parcel was matched"
+    },
+    "flags": []
+  },
+  {
+    "status": "found_unverified",
+    "reason": null,
+    "query": {
+      "address": "8193 Grant Street, Juneau, AK 99801",
+      "parcel_id": "5B2401480020",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "8193 GRANT ST, JUNEAU, AK, 99801",
+      "street": "8193 GRANT ST",
+      "city_name": "JUNEAU",
+      "state": "AK",
+      "zip": "99801",
+      "county": "Juneau City and Borough",
+      "county_code": "02110",
+      "coordinates": {
+        "x": -134.55941000697,
+        "y": 58.397063416648
+      },
+      "city": [
+        "Juneau city and borough"
+      ],
+      "school_districts": [
+        "Juneau Borough School District"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "02110",
+      "county": "Juneau City and Borough",
+      "state": "AK",
+      "status": "matched",
+      "parcel_id": "5B2401480020",
+      "parcel_address": "8193 GRANT ST, JUNEAU, AK 99801",
+      "full_address": "8193 GRANT ST, JUNEAU, AK 99801",
+      "verified": false,
+      "source": "claude_search",
+      "parcel_id_source": "third_party",
+      "candidates": [],
+      "reason": null
+    },
+    "agency": {
+      "status": "found",
+      "validated": false,
+      "basis": "claude_search",
+      "agency_name": "City and Borough of Juneau \u2013 Finance Department (Cash Office / Accounts Receivable)",
+      "payment_address": "CBJ \u2013 Cash Office, City Hall, 155 Heritage Way, Juneau, AK 99801",
+      "portal_url": "https://www.invoicecloud.com/cityandboroughofjuneauak",
+      "separate_collectors": [],
+      "levying_bodies": [
+        "City and Borough of Juneau"
+      ],
+      "collector_model": "unknown",
+      "tax_year": 2025,
+      "checks": [
+        "The agency comes from web research, not from the county statement."
+      ],
+      "notes": "Could not confirm the parcel ID from the county's assessor database (property.juneau.org requires an interactive session) and no public direct-bill PDF URL is available\u2014bills are viewed/paid through the CBJ InvoiceCloud portal after lookup."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no public bill link, parcel id or tax year was found"
+    },
+    "flags": [
+      "The parcel number comes from a third-party source and is not verified against county records."
+    ]
+  },
+  {
+    "status": "county_needed",
+    "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address.",
+    "query": {
+      "address": "767 HOPETOWN RD, Chillicothe, OH 45601",
+      "parcel_id": "340609025000",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": false,
+      "flags": [],
+      "reason": "The Census geocoder found no match for this address."
+    },
+    "parcel": {
+      "status": "county_needed",
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "agency": {
+      "status": "not_searched",
+      "validated": false,
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no agency search was made"
+    },
+    "flags": []
+  },
+  {
+    "status": "found_unverified",
+    "reason": null,
+    "query": {
+      "address": "4510 SIANDRA CREEK CT, SPRING, TX 77386",
+      "parcel_id": "25720215500",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "4510 SIANDRA CREEK CT, SPRING, TX, 77386",
+      "street": "4510 SIANDRA CREEK CT",
+      "city_name": "SPRING",
+      "state": "TX",
+      "zip": "77386",
+      "county": "Montgomery County",
+      "county_code": "48339",
+      "coordinates": {
+        "x": -95.346336285618,
+        "y": 30.086746477487
+      },
+      "city": [],
+      "school_districts": [
+        "Conroe Independent School District"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "48339",
+      "county": "Montgomery County",
+      "state": "TX",
+      "status": "matched",
+      "parcel_id": "25720215500",
+      "parcel_address": "4510 SIANDRA CREEK CT, SPRING, TX 77386",
+      "full_address": "4510 SIANDRA CREEK CT, SPRING, TX 77386",
+      "verified": false,
+      "source": "claude_search",
+      "parcel_id_source": "third_party",
+      "candidates": [],
+      "reason": null
+    },
+    "agency": {
+      "status": "found",
+      "validated": false,
+      "basis": "claude_search",
+      "agency_name": "Montgomery County Tax Office (Tammy J. McRae, Tax Assessor-Collector)",
+      "payment_address": "400 N. San Jacinto St, Conroe, TX 77301-2823",
+      "portal_url": "https://actweb.acttax.com/act_webdev/montgomery/showlist.jsp",
+      "separate_collectors": [],
+      "levying_bodies": [
+        "Montgomery County",
+        "Montgomery County Hospital District",
+        "Lone Star College System",
+        "Montgomery County Emergency Services District No. 8",
+        "Conroe Independent School District"
+      ],
+      "collector_model": "single",
+      "tax_year": null,
+      "checks": [
+        "The agency comes from web research, not from the county statement."
+      ],
+      "notes": "Could not retrieve a direct PDF tax bill URL because the Montgomery County Tax Office actweb portal requires an interactive session/account lookup that is not directly linkable; the parcel ID was confirmed via a third-party source rather than a county portal page I could open directly."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no public bill link, parcel id or tax year was found"
+    },
+    "flags": [
+      "The parcel number comes from a third-party source and is not verified against county records."
+    ]
+  },
+  {
+    "status": "success",
+    "reason": null,
+    "query": {
+      "address": "734 AMSTERDAM AVE, NEW YORK, NY 10025",
+      "parcel_id": null,
+      "state": null,
+      "county": null,
+      "search_mode": "address"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "734 AMSTERDAM AVE, NEW YORK, NY, 10025",
+      "street": "734 AMSTERDAM AVE",
+      "city_name": "NEW YORK",
+      "state": "NY",
+      "zip": "10025",
+      "county": "New York County",
+      "county_code": "36061",
+      "coordinates": {
+        "x": -73.970644514521,
+        "y": 40.793790787334
+      },
+      "city": [
+        "New York city"
+      ],
+      "school_districts": [
+        "New York City Department Of Education"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "36061",
+      "county": "New York County",
+      "state": "NY",
+      "status": "matched",
+      "parcel_id": "1012430036",
+      "parcel_address": "734 AMSTERDAM AVENUE, MANHATTAN, NY",
+      "full_address": "734 AMSTERDAM AVENUE, MANHATTAN, NY",
+      "verified": true,
+      "source": "claude_search",
+      "parcel_id_source": "portal",
+      "candidates": [],
+      "reason": null
+    },
+    "agency": {
+      "status": "found",
+      "validated": true,
+      "basis": "claude_search",
+      "agency_name": "New York City Department of Finance",
+      "payment_address": "NYC Department of Finance, NYC Property Tax Collection, P.O. Box 5536, Binghamton, NY 13902-5536",
+      "portal_url": "https://a836-pts-access.nyc.gov/care/search/commonsearch.aspx?mode=persprop",
+      "separate_collectors": [],
+      "levying_bodies": [
+        "City of New York"
+      ],
+      "collector_model": "unknown",
+      "tax_year": "2026-2027",
+      "checks": [
+        "The agency comes from web research, not from the county statement."
+      ],
+      "notes": "NYC consolidates all property taxes under the Department of Finance; no separate school district or special district collectors bill this parcel."
+    },
+    "tax_bill": {
+      "available": true,
+      "tax_year": "2026-2027",
+      "file_path": "downloads\\NY\\New_York_County\\1012430036_2026-2027_bill.pdf"
+    },
+    "flags": []
+  },
+  {
+    "status": "parcel_not_found",
+    "reason": "The web search did not find a parcel number.",
+    "query": {
+      "address": "787 BARDEL CT, Fairbanks, AK 99712",
+      "parcel_id": "407828",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": true,
+      "normalized_address": "787 BARDEL CT, FAIRBANKS, AK, 99712",
+      "street": "787 BARDEL CT",
+      "city_name": "FAIRBANKS",
+      "state": "AK",
+      "zip": "99712",
+      "county": "Fairbanks North Star Borough",
+      "county_code": "02090",
+      "coordinates": {
+        "x": -147.719351847618,
+        "y": 65.091017574539
+      },
+      "city": [],
+      "school_districts": [
+        "Fairbanks North Star Borough School District"
+      ],
+      "flags": [],
+      "note": "The Census estimates a position along the street, so a real parcel is still needed to confirm the address exists."
+    },
+    "parcel": {
+      "county_code": "02090",
+      "county": "Fairbanks North Star Borough",
+      "state": "AK",
+      "status": "not_found",
+      "verified": false,
+      "source": "claude_search",
+      "candidates": [],
+      "reason": "The web search did not find a parcel number."
+    },
+    "agency": {
+      "status": "not_found",
+      "validated": false,
+      "basis": "county_level_search",
+      "agency_name": null,
+      "payment_address": null,
+      "portal_url": null,
+      "separate_collectors": [],
+      "levying_bodies": [],
+      "collector_model": "unknown",
+      "tax_year": null,
+      "checks": [
+        "No single parcel was matched, so this is the agency for the county, not confirmed for a parcel."
+      ],
+      "notes": ""
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no single parcel was matched"
+    },
+    "flags": []
+  },
+  {
+    "status": "county_needed",
+    "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address.",
+    "query": {
+      "address": "990 A CLEANER WAY, HUNTSVILLE, AL 35805",
+      "parcel_id": "17-06-23-0-000-005.001",
+      "state": null,
+      "county": null,
+      "search_mode": "both"
+    },
+    "address_validation": {
+      "checked": true,
+      "valid": false,
+      "flags": [],
+      "reason": "The Census geocoder found no match for this address."
+    },
+    "parcel": {
+      "status": "county_needed",
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "agency": {
+      "status": "not_searched",
+      "validated": false,
+      "reason": "A parcel number is only unique within one county. Give the state and county, or a valid address."
+    },
+    "tax_bill": {
+      "available": false,
+      "reason": "no agency search was made"
+    },
+    "flags": []
+  }
+]

@@ -1,0 +1,29 @@
+<form method="post" id="search-form">
+  {% csrf_token %}
+  <label>{{ form.mode.label }}</label>
+  {{ form.mode }}
+  {{ form.non_field_errors }}
+  <div class="row" data-modes="address both">
+    {{ form.address.label_tag }}{{ form.address }}{{ form.address.errors }}
+  </div>
+  <div class="row" data-modes="parcel_id both">
+    {{ form.parcel_id.label_tag }}{{ form.parcel_id }}{{ form.parcel_id.errors }}
+  </div>
+  <div class="row" data-modes="parcel_id">
+    {{ form.state.label_tag }}{{ form.state }}{{ form.state.errors }}
+    {{ form.county.label_tag }}{{ form.county }}{{ form.county.errors }}
+  </div>
+  <button type="submit">{{ button }}</button>
+</form>
+<script>
+  // Show only the fields the chosen kind of search uses. With JavaScript off, every field stays visible.
+  (function () {
+    const form = document.getElementById("search-form");
+    function update() {
+      const mode = form.querySelector("input[name=mode]:checked").value;
+      form.querySelectorAll(".row").forEach(row => { row.hidden = !row.dataset.modes.split(" ").includes(mode); });
+    }
+    form.querySelectorAll("input[name=mode]").forEach(r => r.addEventListener("change", update));
+    update();
+  })();
+</script>

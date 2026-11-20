@@ -1,0 +1,77 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Triage with Jev</h1>
+<p class="sub">The same sorting as the Triage tab (<strong>simple</strong>, <strong>medium</strong>, <strong>complex</strong>), but decided by the
+<strong>Jev</strong> model (TypeSafe) instead of fixed rules, shown next to the rule-based level. This is not a search run and makes no Claude call.
+Up to 300 rows.</p>
+<div class="box"><strong>How it works.</strong>
+1. The free Census geocoder (one request) says whether each address is real and in which county, and code checks whether the county has an adapter.
+2. Rows in an adapter county are <strong>simple</strong> by rule; Jev is not called for them.
+3. For every other row Jev is given those facts plus the address and parcel ID text and answers five questions in one call:
+<em>is the address real or junk</em>, <em>is the parcel ID well-formed</em>, <em>is a public portal likely</em>, <em>does one office bill the tax</em>, and <em>how difficult is the row</em>
+(simple / medium / complex, with probabilities).
+4. The row takes Jev's difficulty when its confidence reaches the threshold. Below it, the row keeps the rule-based level and is flagged <strong>needs Claude review</strong>.
+Counting, shares and token sums are done by code, not by Jev.<br>
+"Agrees with the rule-based level" is not the same as "accurate": accuracy needs real run outcomes to compare against.</div>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.non_field_errors }}
+  {{ form.csv_file.label_tag }}{{ form.csv_file }}{{ form.csv_file.errors }}
+  {{ form.lines.label_tag }}{{ form.lines }}{{ form.lines.errors }}
+  {{ form.first_rows.label_tag }}{{ form.first_rows }}{{ form.first_rows.errors }}
+  {{ form.threshold.label_tag }}{{ form.threshold }}{{ form.threshold.errors }}
+  <button type="submit">Triage with Jev</button>
+</form>
+{% if result %}
+{% with total=result.summary.total jev=result.summary.jev %}
+<h2>Summary</h2>
+<p><a href="{% url 'triage_csv' token %}">Download the full triage as CSV</a> (one row per address, with Jev's answers and the level it led to).</p>
+<div class="tablewrap"><table>
+  <tr><th>Level (decided with Jev)</th><th>Rows</th><th>Share</th></tr>
+  {% for key, label, s, rows in levels %}<tr><td><strong>{{ key|title }}</strong> ({{ label }})</td><td>{{ s.rows }}</td><td>{{ s.share_pct }}%</td></tr>{% endfor %}
+  <tr><td><strong>Total</strong></td><td>{{ total.rows }}</td><td>100%</td></tr>
+</table></div>
+
+<h2>How the rows were decided</h2>
+<div class="tablewrap"><table>
+  <tr><th>Decided by</th><th>Rows</th></tr>
+  <tr><td>Hard rule (adapter county; no Jev call)</td><td>{{ jev.hard_rule_rows }}</td></tr>
+  <tr><td>Jev, confidence at or above {{ jev.threshold }}</td><td>{{ jev.used_jev_level }}</td></tr>
+  <tr><td>Rule-based level kept, flagged for Claude review (Jev below the threshold, or the call failed)</td><td>{{ jev.needs_claude }}</td></tr>
+</table></div>
+{% if jev.errors %}<div class="banner bad">{{ jev.errors }} Jev call(s) failed; those rows keep the rule-based level. The error is in the CSV.</div>{% endif %}
+
+<h2>Rule-based level vs Jev</h2>
+<p>For the {{ jev.answered }} rows Jev answered: rows go down by the rule-based level and across by Jev's level.
+Jev agrees with the rule-based level on <strong>{{ jev.agree_with_rule }}</strong> of {{ jev.answered }}.</p>
+<div class="tablewrap"><table>
+  <tr><th>Rule-based level</th><th>Rows</th><th>Jev: simple</th><th>Jev: medium</th><th>Jev: complex</th></tr>
+  {% for a in result.summary.agreement %}<tr><td>{{ a.rule|title }}</td><td>{{ a.rows }}</td><td>{{ a.simple }}</td><td>{{ a.medium }}</td><td>{{ a.complex }}</td></tr>{% endfor %}
+</table></div>
+
+<h2>Cost of this Jev run</h2>
+<p>{{ jev.calls }} Jev calls (model <code>{{ jev.model }}</code>), {{ jev.input_tokens }} input tokens and {{ jev.output_tokens }} output tokens, {{ jev.seconds }} s,
+plus 1 free Census request, and no Claude calls.
+{% if jev.cost_usd is not None %}Cost: <strong>${{ jev.cost_usd }}</strong>.{% else %}The price of Jev is not known to the app, so no dollar figure is shown. Set
+<code>TYPESAFE_COST_INPUT_PER_MTOK</code> and <code>TYPESAFE_COST_OUTPUT_PER_MTOK</code> in <code>.env_typesafe</code> to see it.{% endif %}</p>
+
+{% if review %}
+<h2>Rows flagged for Claude review ({{ review|length }})</h2>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Address</th><th>Rule level</th><th>Jev level</th><th>Jev confidence</th><th>Why</th></tr>
+  {% for r in review %}<tr><td>{{ r.row }}</td><td>{{ r.address }}</td><td>{{ r.rule_level }}</td><td>{{ r.jev_level }}</td><td>{{ r.jev_confidence }}</td><td>{{ r.decided_by }}{% if r.error %}: {{ r.error }}{% endif %}</td></tr>{% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Rows by level</h2>
+{% for key, label, s, rows in levels %}
+<details{% if key == "simple" %} open{% endif %}><summary><strong>{{ key|title }}</strong> ({{ label }}): {{ s.rows }} rows</summary>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Address</th><th>Parcel ID</th><th>Rule</th><th>Jev</th><th>Confidence</th><th>Address</th><th>Parcel ID ok</th><th>Portal</th><th>Billing</th></tr>
+  {% for r in rows %}<tr><td>{{ r.row }}</td><td>{{ r.address }}</td><td>{{ r.parcel_id }}</td><td>{{ r.rule_level }}</td><td>{{ r.jev_level|default:"(rule)" }}</td><td>{{ r.jev_confidence }}</td>
+      <td>{{ r.address_quality }}</td><td>{{ r.parcel_id_wellformed }}</td><td>{{ r.public_portal_likely }}</td><td>{{ r.billing_offices }}</td></tr>{% endfor %}
+</table></div></details>
+{% endfor %}
+{% endwith %}
+{% endif %}
+{% endblock %}

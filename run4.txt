@@ -1,0 +1,50 @@
+10241-10275 NORTH FREEWAY, HOUSTON, TX 77037 | parcel 1176470010007
+  geocoded    : None
+  expected    : ['Aldine ISD (Harris)', 'Fallbrook UD (Harris)', 'Harris County', 'North Houston District', 'North Houston District (Harris)']
+  matched to  : ['Aldine ISD (Harris)', 'Harris County']
+  expected 5, found 2, correct 2  (recall 40%, precision 100%)
+1507 ELGIN AVE, HOUSTON, TX 77004 | parcel 1355270010003
+  geocoded    : {'county_code': '48201', 'county': 'Harris County', 'city': ['Houston city'], 'township': ['Houston CCD'], 'school_district': ['Houston Independent School District']}
+  expected    : ['Harris County', 'Midtown Management District  (Harris)', 'Spring Branch ISD (Harris)', 'Spring Branch Management District (Harris)']
+  matched to  : ['Harris County', 'Midtown Management District  (Harris)']
+  expected 4, found 2, correct 2  (recall 50%, precision 100%)
+8559 SPRING GREEN DR, HOUSTON, TX 77095 | parcel 1153850430041
+  geocoded    : {'county_code': '48201', 'county': 'Harris County', 'city': [], 'township': ['Northwest Harris CCD'], 'school_district': ['Cypress-Fairbanks Independent School District']}
+  expected    : ['Cypress-Fairbanks ISD (Harris)', 'HC MUD 163 (Harris)', 'HC WCID 145 (Harris)', 'Harris County']
+  matched to  : ['Cypress-Fairbanks ISD (Harris)', 'HC MUD 162 (Harris)', 'HC MUD 163 (Harris)', 'HC WCID 145 (Harris)', 'Harris County']
+  expected 4, found 5, correct 4  (recall 100%, precision 80%)
+3225 RAYMOND ST, READING, PA 19605 | parcel 57531806296731
+  geocoded    : {'county_code': '42011', 'county': 'Berks County', 'city': ['Laureldale borough'], 'township': ['Laureldale borough'], 'school_district': ['Muhlenberg School District']}
+  expected    : ['Berks County Treasurer (Adamstown Boro, New Morgan Boro, Reading City)', 'Laureldale Borough (Berks)', 'Muhlenberg SD (Laureldale Borough)', 'Reading City (Berks) - Inactive - See Reading City (Berks Co/Reading City)', 'Reading SD (Reading City)']
+  matched to  : ['Berks County (Delinquent Tax Only)', 'Laureldale Borough (Berks)', 'Muhlenberg SD (Laureldale Borough)']
+  expected 5, found 3, correct 2  (recall 40%, precision 67%)
+12989 Half moon Road, Wattsburg, PA 16442 | parcel 44011014001302
+  geocoded    : {'county_code': '42049', 'county': 'Erie County', 'city': [], 'township': ['Venango township'], 'school_district': ['Wattsburg Area School District']}
+  expected    : ['Venango Township (Erie)', 'Wattsburg Area SD (Venango Township)', 'Wattsburg Area SD (Wattsburg Borough)', 'Wattsburg Borough (Erie)']
+  matched to  : ['Erie County  (Delinquent Reporting Only)', 'Venango Township (Erie)', 'Wattsburg Area SD (Venango Township)']
+  expected 4, found 3, correct 2  (recall 50%, precision 67%)
+42925 Route 6, Columbus , PA 16405 | parcel CY-3-8249
+  geocoded    : {'county_code': '42123', 'county': 'Warren County', 'city': [], 'township': ['Columbus township'], 'school_district': ['Corry Area School District']}
+  expected    : ['Columbus Township (Warren)', 'Corry Area SD (Columbus Township)', 'Warren County', 'Warren County (Delinquent Reporting Only)(Tax Claim)']
+  matched to  : ['Columbus Township (Warren)', 'Corry Area SD (Columbus Township)', 'Warren County', 'Warren County (Delinquent Reporting Only)(Tax Claim)']
+  expected 4, found 4, correct 4  (recall 100%, precision 100%)
+706 BUOY RD, HOUSTON, TX 77062 | parcel 1003390000002
+  geocoded    : {'county_code': '48201', 'county': 'Harris County', 'city': ['Houston city'], 'township': ['Houston CCD'], 'school_district': ['Clear Creek Independent School District']}
+  expected    : ['Clear Creek ISD-Harris (League City/Friendswood City)', 'Clear Lake City WA (Harris)', 'HC WCID 156 (Harris)', 'Harris County']
+  matched to  : ['Clear Creek ISD-Harris (League City/Friendswood City)', 'Harris County']
+  expected 4, found 2, correct 2  (recall 50%, precision 100%)
+238 Chappell Grove LN, Chappell Hill, TX 77426 | parcel 67821
+  geocoded    : None
+  expected    : ['Austin CAD', 'Burton City (Washington)', 'Burton ISD (Washington)', 'Washington CAD']
+  matched to  : ['Washington County']
+  expected 4, found 1, correct 0  (recall 0%, precision 0%)
+2218 2ND ST, EASTON, PA 18042 | parcel M9NW2D 3 12A 0837
+  geocoded    : {'county_code': '42095', 'county': 'Northampton County', 'city': ['Wilson borough'], 'township': ['Wilson borough'], 'school_district': ['Wilson Area School District']}
+  expected    : ['Northampton County', 'Northampton County Tax Claim Bureau', 'Portnoff Law Associates, Ltd.', 'Wilson Area SD (Wilson Borough)', 'Wilson Borough (Northampton)']
+  matched to  : ['Northampton County', 'Wilson Area SD (Wilson Borough)', 'Wilson Borough (Northampton)']
+  expected 5, found 3, correct 3  (recall 60%, precision 100%)
+329 Commerce St, Corning, NY 14830 | parcel 460300 318.39-01-042.000
+  geocoded    : {'county_code': '36101', 'county': 'Steuben County', 'city': ['Corning city'], 'township': ['Corning city'], 'school_district': ['Corning City School District']}
+  expected    : ['Corning City  (County Billing)  (Steuben)', 'Corning City (Steuben)', 'Corning-Painted Post SD (Corning City,Bradford Town, Campbell Town, Caton Town,  Corning Town, Erwin Town, Hornby Town, Lindley Town,  Painted Post Village)', 'Steuben County  Delinquent Taxes Only']
+  matched to  : ['Corning City  (County Billing)  (Steuben)', 'Corning City (Steuben)', 'Corning-Painted Post SD (Corning City,Bradford Town, Campbell Town, Caton Town,  Corning Town, Erwin Town, Hornby Town, Lindley Town,  Painted Post Village)', 'Steuben County  Delinquent Taxes Only']
+  expected 4, found 4, correct 4  (recall 100%, precision 100%)

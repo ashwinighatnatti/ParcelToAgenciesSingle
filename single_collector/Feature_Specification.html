@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Single-Collector Pipeline: Feature Specification</title>
+<style>
+  :root{--bg:#ffffff;--text:#1d2433;--muted:#5b6577;--line:#dde2ea;--panel:#f5f7fa;--accent:#1f5fbf;--good:#1b7a46;--warn:#a65b00;--bad:#b3261e;--code:#eef1f6}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#12161d;--text:#e6e9ef;--muted:#9aa4b5;--line:#2b3342;--panel:#1a2029;--accent:#7aa7f0;--good:#5cc98a;--warn:#e6a756;--bad:#ef8a83;--code:#222a36}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:1000px;margin:0 auto;padding:32px 16px 80px}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+  h2{font-size:1.35rem;margin:44px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+  h3{font-size:1.05rem;margin:22px 0 6px}
+  p,li{max-width:76ch}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0}
+  .box>:first-child{margin-top:0}.box>:last-child{margin-bottom:0}
+  .key{border-left:4px solid var(--accent)}.caution{border-left:4px solid var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.9rem}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel)}
+  .tablewrap{overflow-x:auto}
+  code{background:var(--code);border-radius:4px;padding:1px 5px;font-size:.86em}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:.82rem;line-height:1.45}
+  pre code{background:none;padding:0}
+  .ok{color:var(--good);font-weight:600}.part{color:var(--warn);font-weight:600}.no{color:var(--bad);font-weight:600}
+  nav ol{columns:2;column-gap:32px;padding-left:20px;margin:6px 0 0}nav a{color:var(--accent)}
+  @media (max-width:640px){nav ol{columns:1}h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Single-Collector Pipeline: Feature Specification</h1>
+<p class="sub">What is implemented, how each feature was verified, and what it cannot do yet. Covers the search pipeline (<code>single_collector</code>) and its Django web UI (<code>django_ui</code>).
+Written 2026-11-17 for the three-stage design. This is a capability check, not a production system.</p>
+
+<nav class="box">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#overview">Overview and status</a></li>
+    <li><a href="#flow">How a search flows</a></li>
+    <li><a href="#features">Feature list</a></li>
+    <li><a href="#schema">Result record and statuses</a></li>
+    <li><a href="#adapters">County adapters</a></li>
+    <li><a href="#ui">Web UI</a></li>
+    <li><a href="#ranking">State ranking</a></li>
+    <li><a href="#tests">What was tested</a></li>
+    <li><a href="#limits">Limitations and risks</a></li>
+    <li><a href="#run">Setup and how to run</a></li>
+    <li><a href="#next">Open decisions and next steps</a></li>
+  </ol>
+</nav>
+
+<h2 id="overview">1. Overview and status</h2>
+<p>The system finds the tax collecting agency for a property, starting from a <strong>parcel address</strong>, a <strong>parcel ID</strong>, or <strong>both</strong>.
+It runs three stages: <code>validate_address</code>, <code>find_validate_parcel</code>, <code>find_validate_agency</code>. It does not use a fixed list of states or agencies:
+the county comes from the US Census, the parcel from the county's own records, and the agency from the county's statement page (or, for a county without an adapter, from Claude's live web research).</p>
+<div class="box key">
+  <p><strong>Bottom line from testing.</strong> For the two adapter counties (Maricopa AZ, King WA) every route works end to end and results are <em>verified</em>:
+  parcel found in the county's records, agency read from the county's statement, parcel number confirmed on it, bill PDF saved.
+  For any other county the pipeline still finds a parcel and agency by web research, but labels them <code>found_unverified</code> and usually cannot retrieve a bill.
+  When an address has no parcel (the reported 4800 Ravenna Ave NE case), the result now explains why and suggests the nearest parcels instead of returning a blank.</p>
+</div>
+<div class="tablewrap"><table>
+  <tr><th>Legend</th><th>Meaning</th></tr>
+  <tr><td><span class="ok">Verified</span></td><td>Run against real addresses or services, with the result checked</td></tr>
+  <tr><td><span class="part">Partly verified</span></td><td>Works in the tested cases; known gaps are stated</td></tr>
+  <tr><td><span class="no">Not verified</span></td><td>Implemented but not exercised end to end</td></tr>
+</table></div>
+
+<h2 id="flow">2. How a search flows</h2>
+<ol>
+  <li><strong>Stage 1, validate the address.</strong> The Census geocoder returns the normalized address and county; TIGERweb returns the city and school districts. Skipped when searching by parcel ID alone.</li>
+  <li><strong>Stage 2, find / validate the parcel.</strong> By parcel ID, by address, or both (cross-checked). Returns the parcel ID and the parcel's own address. No parcel, or several, gives a reason and the nearest parcels.</li>
+  <li><strong>Stage 3, find / validate the agency.</strong> The agency is read from the county's statement page and checked against the parcel number. The statement is saved as a PDF.</li>
+</ol>
+<p>The data-flow diagram and six worked examples are in <code>Search_Flow.html</code>.</p>
+
+<h2 id="features">3. Feature list</h2>
+<div class="tablewrap"><table>
+  <tr><th>ID</th><th>Feature</th><th>What it does</th><th>Where</th><th>Status</th></tr>
+  <tr><td>F1</td><td>Three search modes</td><td>Search by parcel address, parcel ID (with state and county), or both. A search with neither is rejected.</td><td><code>run.process</code>, <code>forms.SearchForm</code></td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>F2</td><td>Address validation (stage 1)</td><td>Census geocoding: normalized address, state, county code, coordinates. TIGERweb: county, incorporated city (empty means unincorporated), school districts. Flags when the input state or county differs from the Census, or when the geocoder and TIGERweb disagree.</td><td><code>stages.validate_address</code>, <code>geocode.py</code>, <code>census.tigerweb_boundaries</code></td><td><span class="ok">Verified</span> (the geocoder found 21 of 30 addresses in an earlier check; unmatched addresses return <code>invalid_address</code>)</td></tr>
+  <tr><td>F3</td><td>Batch geocoding</td><td>One <code>/addressbatch</code> request when there are 10 or more addresses. An unparseable address is reported as no match and no longer stops the run.</td><td><code>census.geocode_batch</code></td><td><span class="part">Partly verified</span>: the function was tested on 3 to 4 addresses (including a malformed one); not run through the CLI with 10 or more</td></tr>
+  <tr><td>F4</td><td>County lookup by name</td><td>Turns a state and county name into a county code with live Census data ("King", "King County", "Prince George's"). No fixed county table.</td><td><code>census.resolve_county</code></td><td><span class="ok">Verified</span> (WA, AZ, MD; an unknown county returns none)</td></tr>
+  <tr><td>F5</td><td>Parcel search by ID</td><td>Looks the parcel up in the county's records and returns its address. A missing parcel gives a clear reason. Accepts formats with or without dashes.</td><td><code>stages.parcel_by_id</code>, adapters</td><td><span class="ok">Verified</span> (Maricopa and King; a nonexistent id)</td></tr>
+  <tr><td>F6</td><td>Parcel search by address</td><td>Matches the house number and street (tolerating abbreviations such as AVE/AV) against the county's parcels. One match: matched. Several (a condominium): <code>parcel_ambiguous</code> with all of them listed. None: <code>parcel_not_found</code> with the reason and the five nearest parcels on the street.</td><td><code>stages.parcel_by_address</code></td><td><span class="ok">Verified</span> (exact, ambiguous, and the Ravenna no-match case)</td></tr>
+  <tr><td>F7</td><td>Parcel and address cross-check</td><td>When both are given, compares the parcel's address with the address entered and flags a mismatch. Neither input silently wins.</td><td><code>stages.parcel_by_id</code></td><td><span class="ok">Verified</span> (a Phoenix address with another property's parcel)</td></tr>
+  <tr><td>F8</td><td>Suggested parcels</td><td>Nearest parcels are returned as candidates; the UI lets the user search again with one. The code never chooses a nearby parcel itself.</td><td><code>stages</code>, <code>_parcel.html</code>, <code>views.use_parcel</code></td><td><span class="ok">Verified</span> (4745 Ravenna Ave NE chosen and fully resolved)</td></tr>
+  <tr><td>F9</td><td>Parcel by web research</td><td>For a county without an adapter, Claude searches the web for the parcel, its address and the agency. The parcel is labelled unverified unless Claude says it came from a county portal.</td><td><code>stages.parcel_by_web_search</code>, <code>portal.research_property</code></td><td><span class="part">Partly verified</span>: one NJ address; results vary between runs</td></tr>
+  <tr><td>F10</td><td>Agency from the county statement (stage 3)</td><td>Opens the county's statement page in a headless browser; Claude reads the agency name, office address, taxing bodies and any separate collector from the page text; the agency is <code>validated</code> only if the parcel number appears on the page. No agency text is stored in the code.</td><td><code>stages.agency_from_statement</code>, <code>portal.read_statement</code></td><td><span class="ok">Verified</span> (4 searches across Maricopa and King)</td></tr>
+  <tr><td>F11</td><td>Agency by web research</td><td>Without an adapter, or without a single parcel, the agency comes from web research and is marked unvalidated. With no single parcel it is the agency for the county only, with no bill.</td><td><code>stages.find_validate_agency</code></td><td><span class="part">Partly verified</span> (NJ and the Ravenna case)</td></tr>
+  <tr><td>F12</td><td>Collector model</td><td><code>multiple</code> if a separate collector is named; <code>single</code> if the statement itemises two or more taxing bodies; otherwise <code>unknown</code>.</td><td><code>stages.agency_record</code></td><td><span class="part">Partly verified</span>: <code>single</code> and <code>unknown</code> seen; <code>multiple</code> never occurred in testing</td></tr>
+  <tr><td>F13</td><td>Bill PDF</td><td>The statement page is printed to PDF and saved to <code>downloads/{state}/{county}/{parcel}_{year}_bill.pdf</code>. On the web-research route a bill link is downloaded, or rendered to PDF if it is an HTML page; a missing or blocked bill is reported with a reason.</td><td><code>portals.capture_statement</code>, <code>bill.py</code></td><td><span class="ok">Verified</span> (4 statements saved and checked; direct PDF, HTML page, missing link and 403 handled)</td></tr>
+  <tr><td>F14</td><td>Result record and statuses</td><td>One JSON record per search with the three stage results, the bill and flags. <code>success</code> means verified; web-research results are <code>found_unverified</code> (<a href="#schema">section 4</a>).</td><td><code>run.process</code></td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>F15</td><td>Command line</td><td>Addresses as arguments, <code>--parcel --state --county</code>, or <code>--file</code> CSV (<code>address,parcel_id,state,county</code>); results to <code>--manifest</code> (default <code>output/manifest.json</code>). An exception in one search becomes an <code>error</code> record and the rest continue.</td><td><code>run.py</code></td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>F16</td><td>County adapters</td><td>Maricopa AZ and King WA: parcel search in the county GIS service, statement in the county treasurer's portal. A failed adapter falls back to web research with a flag.</td><td><code>portals/</code></td><td><span class="ok">Verified</span> (<a href="#adapters">section 5</a>)</td></tr>
+  <tr><td>F17</td><td>Adapter runner</td><td>Runs one adapter alone: <code>python -m single_collector.portals &lt;code&gt; --parcel ID</code> or <code>--street --zip</code>.</td><td><code>portals/__main__.py</code></td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>F18</td><td>State ranking</td><td>Ranks the states where one office collects the tax, easiest first (<a href="#ranking">section 7</a>). Independent of the search.</td><td><code>rank_states.py</code></td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>F19</td><td>Django web UI</td><td>Search, Quick check, Batch, History, Rank states and Jurisdictions pages; searches run as background jobs (<a href="#ui">section 6</a>).</td><td><code>django_ui/</code></td><td><span class="ok">Verified</span> (26 scripted page checks; a real-browser run, see <a href="#tests">section 8</a>)</td></tr>
+  <tr><td>F20</td><td>Legacy Streamlit UI</td><td>The earlier test UI. Still present but built for the previous flow; superseded by F19.</td><td><code>single_collector/app.py</code></td><td><span class="part">Superseded</span></td></tr>
+  <tr><td>F21</td><td>Confidence score</td><td>Every search gets a 0-100 score with the evidence behind it (<a href="#scoring">section 4a</a>).</td><td><code>single_collector/confidence.py</code></td><td><span class="ok">Verified</span> (full-score and zero-score cases run)</td></tr>
+  <tr><td>F22</td><td>Cost per search</td><td>Every search reports the Claude calls, tokens, web searches and dollars it used, by stage (<a href="#scoring">section 4a</a>).</td><td><code>agent.py</code>, <code>single_collector/cost.py</code></td><td><span class="ok">Verified</span> (measured on two real searches)</td></tr>
+  <tr><td>F23</td><td>Trajectory (audit trail)</td><td>Every search records each public service called, each Claude web search and page read, and what each returned; shown on the result page and in the audit file (<a href="#audit">section 4b</a>).</td><td><code>single_collector/trace.py</code>, <code>agent.py</code></td><td><span class="ok">Verified</span> (3-row run, all sheets checked)</td></tr>
+  <tr><td>F24</td><td>Audit file</td><td>Excel workbook per job: Summary, Trajectory, Websites, Web searches, Confidence, Method. Download button on every job page.</td><td><code>single_collector/audit_file.py</code></td><td><span class="ok">Verified</span></td></tr>
+</table></div>
+
+<h2 id="schema">4. Result record and statuses</h2>
+<p>Example (the reported case, real output):</p>
+<pre><code>{
+  "status": "parcel_not_found",
+  "reason": "No parcel at '4800 RAVENNA AVE NE' exists in the King County records, although the Census placed the address on that street. The nearest parcels on that street are listed. Pick one, or enter its parcel id.",
+  "query": { "address": "4800 Ravenna Ave NE, Seattle, WA 98105", "parcel_id": null, "state": null, "county": null, "search_mode": "address" },
+  "address_validation": { "valid": true, "normalized_address": "4800 RAVENNA AVE NE, SEATTLE, WA, 98105",
+                          "county": "King County", "county_code": "53033", "city": ["Seattle city"],
+                          "school_districts": ["Seattle Public Schools"], "flags": [] },
+  "parcel": { "status": "not_found", "verified": false, "source": "county_gis",
+              "candidates": [ { "parcel_id": "0925049175", "parcel_address": "4745 RAVENNA AVE NE", "city": "SEATTLE", "zip": "98105" }, ... ] },
+  "agency": { "status": "found", "validated": false, "basis": "county_level_search",
+              "agency_name": "King County Treasury Operations", "collector_model": "single", ... },
+  "tax_bill": { "available": false, "reason": "no single parcel was matched" },
+  "flags": []
+}</code></pre>
+<div class="tablewrap"><table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td><code>success</code></td><td>The parcel is in the county's records and the agency was read from the county's statement, with the parcel number confirmed on it</td></tr>
+  <tr><td><code>found_unverified</code></td><td>A parcel and agency were found by web research only</td></tr>
+  <tr><td><code>exception_multi_agency</code></td><td>The agency was found, but a separate city, school or special-district collector was reported</td></tr>
+  <tr><td><code>agency_not_found</code></td><td>The parcel was found but no agency was identified</td></tr>
+  <tr><td><code>parcel_not_found</code></td><td>No parcel at that address or with that ID. The reason and nearest parcels are included</td></tr>
+  <tr><td><code>parcel_ambiguous</code></td><td>Several parcels share the address; all are listed</td></tr>
+  <tr><td><code>county_needed</code> / <code>county_unknown</code></td><td>A parcel ID was given without a usable state and county</td></tr>
+  <tr><td><code>invalid_address</code></td><td>The Census cannot place the address (and no parcel ID was given)</td></tr>
+  <tr><td><code>error</code></td><td>The search raised an error or had no input; the message is in <code>reason</code></td></tr>
+</table></div>
+<p>A <code>success</code> record can still have <code>tax_bill.available: false</code> if the PDF could not be saved; check both. Flags that can appear: input state or county differs from the Census; geocoder and TIGERweb disagree on the county; the parcel's address differs from the address entered; the parcel number is from a third-party source; the county portal script failed and web research was used.</p>
+
+<h2 id="scoring">4a. Confidence score and cost per search</h2>
+<p>Both are added to every result record as <code>confidence</code> and <code>cost</code>, and shown on the result page.</p>
+<h3>Confidence (0-100)</h3>
+<p>Points are earned for how strong the evidence is at each stage. A search by parcel ID has no address to check, so the address part is left out and the score is points earned divided by points possible. If no agency is found the score is 0, because there is no answer to be confident about.</p>
+<div class="tablewrap"><table>
+<tr><th>Evidence</th><th>Situation</th><th>Points</th></tr>
+<tr><td>Address (20)</td><td>The Census geocoder matched the address</td><td>20</td></tr>
+<tr><td rowspan="3">Parcel (40)</td><td>Found in the county's own records (GIS adapter)</td><td>40</td></tr>
+<tr><td>Parcel number read from the county portal through web research</td><td>30</td></tr>
+<tr><td>Parcel number from a third-party website</td><td>15</td></tr>
+<tr><td rowspan="4">Agency (40)</td><td>Read from the county statement that shows this parcel</td><td>40</td></tr>
+<tr><td>Read from the statement, but the parcel number was not on the page</td><td>10</td></tr>
+<tr><td>Named by web research for this parcel</td><td>20</td></tr>
+<tr><td>Named by web research for the county only</td><td>8</td></tr>
+<tr><td rowspan="2">Adjustments</td><td>The parcel's address differs from the address entered</td><td>-20</td></tr>
+<tr><td>A separate city, school or special-district collector was reported</td><td>-10</td></tr>
+</table></div>
+<p>Levels: high 80-100, medium 50-79, low 0-49. The weights are a judgement, not a statistical calibration; they should be tuned once Operations' answers are compared with the scores.</p>
+<h3>Cost</h3>
+<p>Every Claude call goes through <code>agent.ask</code>, which records the usage the API reports. <code>cost.py</code> prices it per stage:</p>
+<p><code>cost = (input tokens + 1.25 x cache-write tokens + 0.10 x cache-read tokens) x input price + output tokens x output price + web searches x search price</code></p>
+<ul>
+<li><strong>Prices</strong> default to $5 per million input tokens, $25 per million output tokens and $0.01 per web search (an Opus-class list price, assumed). Override with <code>COST_INPUT_PER_MTOK</code>, <code>COST_OUTPUT_PER_MTOK</code>, <code>COST_WEB_SEARCH_EACH</code> in <code>.env</code> and check them against the Azure invoice.</li>
+<li><strong>Input tokens are the hidden cost.</strong> A web search is not one call to the model: inside one request the model searches, reads the results, and searches again. Each search result is added to the context and billed as input, and the growing context is billed again at every step. One failed web research measured <strong>26 searches, 1,395,129 input tokens and $7.53</strong>, almost all of it input tokens; the search fee was only $0.26.</li>
+<li><strong>Output tokens include narration.</strong> The model's text between searches is billed even though <code>ask</code> discards it.</li>
+<li><strong>Tool definitions</strong> are added to the prompt automatically and billed as input on every call.</li>
+<li><strong>Free:</strong> Census, TIGERweb and the county map services. The Playwright browser runs on your machine and is not billed.</li>
+<li><strong>Not measured:</strong> a call that raises an error returns no usage and is not counted; any charge Azure adds for code execution used by the dynamic-filtering search tool is not visible in the usage data.</li>
+</ul>
+<p>Measured so far: a county-adapter search where Claude only reads the statement page, <strong>$0.012</strong> (1 call, 1,410 input and 190 output tokens); an address in a county without an adapter, where Claude researches on the web, <strong>$7.53</strong> in the run above (typically far less when the search succeeds quickly). Cost depends on how long the web search runs, not on the address. Each web research call is now capped at 6 searches and 4 page fetches (<code>MAX_SEARCHES</code>, <code>MAX_FETCHES</code> in <code>portal.py</code>); the same Orlando address then took 52 seconds, 4 searches, 100,142 input tokens and $0.60.</p>
+
+<h2 id="audit">4b. Trajectory and audit file</h2>
+<p>Every result carries an <code>audit</code> block built by <code>trace.py</code>: <code>steps</code>, <code>websites</code>, <code>web_searches</code> and <code>by_stage</code> (a one-line summary per stage). Each step records its stage, the source, the action, what was asked, what came back and the URL. A Claude step also records the web searches it ran, the results it received, the pages it opened, the text it wrote, its tokens and its cost.</p>
+<ul>
+<li><strong>Where it shows:</strong> the Search tab explains the method (stages, confidence table, ranking rule); every result page has a Trajectory section; every job page has <strong>Download audit file (Excel)</strong>.</li>
+<li><strong>Audit file sheets:</strong> Summary (one row per search), Trajectory (every step), Websites, Web searches, Confidence (points behind each score), Method.</li>
+<li><strong>The ranking explained:</strong> suggested parcels are ordered by how close their house number is to the address entered (same street, same ZIP), and the 5 nearest are shown; none is picked automatically. The Rank states tab is a separate ranking of states.</li>
+<li><strong>Limits of the record:</strong> web search and fetch run on Anthropic's side, so the record is what the API reports back. It lists the results a Claude call received, not which result came from which query. The newer search tools also run server-side code to filter results; this is counted (<code>server_code_runs</code>) but its billing is not visible.</li>
+</ul>
+
+<h2 id="adapters">5. County adapters</h2>
+<div class="tablewrap"><table>
+  <tr><th>County (code)</th><th>Parcel search</th><th>Statement</th><th>Result</th></tr>
+  <tr><td>Maricopa, AZ (04013)</td><td>Assessor GIS parcel layer: by parcel number (with or without dashes) and by address</td><td>Treasurer site: Payment Coupon tab, latest year, tax breakdown printed to PDF</td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>King, WA (53033)</td><td>County GIS parcel layer: by parcel number and by address</td><td>Treasury site: tax breakdown by year plus the tax/fee distribution, printed to PDF</td><td><span class="ok">Verified</span></td></tr>
+  <tr><td>San Francisco, CA; Orange, FL</td><td>no adapter</td><td><code>county-taxes.com / .net</code> sit behind a Cloudflare bot challenge</td><td><span class="no">Blocked</span>, not bypassed; they use the web-research route</td></tr>
+</table></div>
+<ul>
+  <li>An adapter holds no agency information. For King County the agency read from the page is <em>Treasury Operations</em>, office <em>King Street Center, 201 South Jackson Street #710, Seattle, WA 98104</em>, portal <code>https://payment.kingcounty.gov</code>, with 14 taxing bodies itemised. For Maricopa it is <em>Maricopa County - Treasurer's Office</em>, <em>301 W. Jefferson St. Suite 100, Phoenix, AZ 85003</em>; the Maricopa page does not itemise taxing bodies, so the collector model is <code>unknown</code>.</li>
+  <li>The Census point is interpolated along the street and usually lies outside the parcel, so both adapters search by address text, not by coordinates.</li>
+  <li>The saved PDFs were checked: they contain the parcel number, the address and the billed amounts shown on the portal.</li>
+  <li>Test properties were commercial or public, plus one residential parcel chosen from a county's own suggestions. Private homes were not queried on purpose.</li>
+</ul>
+
+<h2 id="ui">6. Web UI</h2>
+<p>A Django app in <code>django_ui/</code>. A search can take minutes, so it runs as a <strong>background job</strong>: the page shows "Searching…" with elapsed time and reloads by itself when the job finishes. Each job runs the command-line pipeline in a separate process and stores the result in a local SQLite database.</p>
+<div class="tablewrap"><table>
+  <tr><th>Page</th><th>What it does</th></tr>
+  <tr><td>Search</td><td>The three search modes (the form shows only the fields each needs). Starts a job and shows the three stage results, the suggested parcels, and a link to the bill PDF.</td></tr>
+  <tr><td>Result page</td><td>Per-stage sections (validate address; parcel ID and address; agency), the bill link, flags and the full JSON. Suggested parcels have a "Search with this parcel" button that starts a new search by that parcel ID.</td></tr>
+  <tr><td>Quick check</td><td>Stages 1 and 2 only, answered immediately, for counties with an adapter. A county without one is sent to the full search, because web research takes minutes.</td></tr>
+  <tr><td>Batch</td><td>Up to 200 searches from typed addresses or an uploaded CSV, run as one job; shows a summary table with expandable details.</td></tr>
+  <tr><td>History</td><td>The last 50 searches with their status; each opens its stored result.</td></tr>
+  <tr><td>Rank states, Jurisdictions</td><td>The state ranking (fetches live Census data when asked) and the 51-jurisdiction reference file.</td></tr>
+</table></div>
+<ul>
+  <li>Bills are served only from the <code>downloads/</code> folder and only as PDFs; other paths return a 404.</li>
+  <li>A job left running by a server restart is marked failed rather than waiting forever.</li>
+  <li>The UI has no login and runs with <code>DEBUG</code> on. It is built for one user on localhost.</li>
+</ul>
+
+<h2 id="ranking">7. State ranking</h2>
+<p><code>python -m single_collector.rank_states</code> (or the Rank states page) lists the states where one office collects the property tax, easiest first, using visible signals only:</p>
+<ol>
+  <li><strong>Gate:</strong> the state is marked single-collector in <code>jurisdictions_config.json</code> (25 of 51 jurisdictions; a draft that Operations should validate).</li>
+  <li><strong>Confidence</strong> in that classification (Tier 1A high, Tier 1B medium).</li>
+  <li><strong>Portals to cover:</strong> how many of the state's largest counties hold 80% of its housing units (live from Census TIGERweb).</li>
+</ol>
+<p>First ten: DC (1 portal), Nevada (2), Arizona (4), Utah (6), Washington (10), Colorado (11), Wyoming (12), New Mexico (12), Oregon (12), Idaho (15). The search itself no longer reads this file.</p>
+
+<h2 id="tests">8. What was tested</h2>
+<div class="tablewrap"><table>
+  <tr><th>Test</th><th>Result</th></tr>
+  <tr><td>Stages 1 and 2 alone, 10 cases (no Claude, no browser)</td><td><span class="ok">All behaved as designed</span>: Ravenna (reason + 5 suggestions); King and Maricopa by address; both by parcel ID only; parcel and address that disagree (flag); 721 Pine St (3 parcels, ambiguous); a nonexistent parcel; a parcel ID without a county; an invalid address</td></tr>
+  <tr><td>Full pipeline, King County by address (400 Broad St)</td><td><span class="ok">success</span>: parcel 1985200495, agency read from the statement, 14 taxing bodies, PDF saved</td></tr>
+  <tr><td>Full pipeline, Maricopa by parcel ID only (118-50-094)</td><td><span class="ok">success</span>: address 330 W HOLLY ST found and validated, agency from the Treasurer's page, PDF saved</td></tr>
+  <tr><td>Full pipeline, Ravenna (4800 Ravenna Ave NE)</td><td><span class="ok">parcel_not_found</span> with 5 suggestions; county-level agency shown as unvalidated</td></tr>
+  <tr><td>Follow-up: parcel 0925049175 (4745 Ravenna Ave NE)</td><td><span class="ok">success</span> with a PDF</td></tr>
+  <tr><td>Full pipeline, a county with no adapter (NJ)</td><td><span class="ok">found_unverified</span> (parcel from a third-party source, agency unvalidated, no bill)</td></tr>
+  <tr><td>Bill download: direct PDF, HTML page, missing link, 403 page</td><td><span class="ok">4 of 4 behaved as specified</span> (earlier test of <code>bill.py</code>)</td></tr>
+  <tr><td>San Francisco and Orange County portals</td><td><span class="no">Cloudflare challenge</span>; not bypassed</td></tr>
+  <tr><td>Django: every page and form via the test client</td><td><span class="ok">26 of 26 checks passed</span>: page loads, form validation per mode, quick check (suggestions, parcel-only, no-adapter message, mismatch), a real background job and batch job (using invalid addresses so they finish in seconds), history, empty batch rejected, <code>use_parcel</code> validation, bill download, path-traversal and non-PDF downloads blocked, ranking</td></tr>
+  <tr><td>Django in a real browser, against the running server</td><td><span class="ok">Passed.</span> A real browser opened the page, switched search modes (the form shows only the needed fields), submitted the Ravenna address, waited on the "Searching" page, saw <code>parcel_not_found</code> with the five suggested parcels, clicked the first suggestion, and reached <code>success</code> for 4745 Ravenna Ave NE with the agency read from the statement and a downloadable PDF (checked: a valid PDF of about 298 KB). The Ravenna search took about 4.5 minutes, almost all of it the county-level agency web research (see <a href="#next">next steps</a>); the follow-up took 24 seconds.</td></tr>
+  <tr><td>State ranking</td><td><span class="ok">25 states ranked</span></td></tr>
+</table></div>
+<p><strong>Not yet tested:</strong> the batch geocoder through the CLI with 10 or more addresses; a parcel ID supplied together with an address on the web-research route; <code>exception_multi_agency</code> on a real multi-collector case; stage 3 for an ambiguous address end to end; the Quick check page for a parcel-only search in a non-adapter county; several simultaneous jobs; a portal behind a login or a CAPTCHA other than Cloudflare; any adapter besides Maricopa and King.</p>
+
+<h2 id="limits">9. Limitations and risks</h2>
+<ul>
+  <li><strong>Coverage:</strong> verified results exist for two counties. Elsewhere, results are web research: slower (minutes), labelled unverified, and vary between runs.</li>
+  <li><strong>Each adapter is one county's page layout.</strong> A redesign breaks it. A failed adapter is flagged and web research takes over, which usually cannot retrieve a bill.</li>
+  <li><strong>The agency is read by Claude from the page text.</strong> It is checked against the parcel number on the page, but the wording is the portal's own (for example "Treasury Operations" rather than "King County Treasury Operations").</li>
+  <li><strong>Street matching is heuristic.</strong> It tolerates abbreviations but treats a differently named street as a different street; ranges, corner lots and unusual forms may need manual parcel entry.</li>
+  <li><strong>"Single collector" is not "one agency" in Operations' data.</strong> A San Francisco parcel lists four agencies (secured, supplemental, unsecured, business tax), all billed by one office.</li>
+  <li><strong>The earlier spec example was wrong:</strong> 4600 Silver Hill Rd is in Prince George's County, Maryland, not DC. The pipeline uses the Census state.</li>
+  <li><strong>Privacy and terms:</strong> property addresses and parcel numbers go to the Census, county GIS services and portals, and the Claude deployment with its search tool. Confirm this fits your data policy and each portal's terms. The adapters make one lookup at a time with no rate-limit handling.</li>
+  <li><strong>Cost and time are unmeasured.</strong> An adapter county takes about a minute per search; web research takes minutes. Token cost has not been measured.</li>
+  <li><strong>The web UI has no access control.</strong> Run it locally only. For shared use it needs authentication, a real secret key, <code>DEBUG</code> off and a proper job queue.</li>
+</ul>
+
+<h2 id="run">10. Setup and how to run</h2>
+<h3>Requirements</h3>
+<ul>
+  <li>Python 3.14 with: <code>anthropic</code>, <code>python-dotenv</code>, <code>requests</code>, <code>pandas</code>, <code>openpyxl</code>, <code>playwright</code>, <code>django</code>. Run <code>playwright install chromium</code> once.</li>
+  <li>A <code>.env</code> in the project folder with the Azure AI Foundry settings (names only): <code>AZURE_ANTHROPIC_API_KEY</code>, <code>AZURE_ANTHROPIC_API_ENDPOINT</code>, <code>AZURE_ANTHROPIC_DEPLOYMENT_NAME</code>.</li>
+  <li>The Operations Excel file in the project folder (used only by the state ranking).</li>
+</ul>
+<h3>Commands (from the project folder)</h3>
+<pre><code>python django_ui/manage.py migrate             # once: creates the job database
+python django_ui/manage.py runserver           # the web UI at http://127.0.0.1:8000/
+
+python -m single_collector.run "400 Broad St, Seattle, WA 98109"                        # by address
+python -m single_collector.run --parcel 1985200495 --state WA --county King             # by parcel id
+python -m single_collector.run "400 Broad St, Seattle, WA 98109" --parcel 1985200495    # both, cross-checked
+python -m single_collector.run --file searches.csv                                      # address,parcel_id,state,county
+python -m single_collector.portals 53033 --parcel 1985200495                            # one adapter alone
+python -m single_collector.rank_states                                                  # state ranking</code></pre>
+
+<h2 id="next">11. Open decisions and next steps</h2>
+<ol>
+  <li><strong>Choose the next counties for adapters.</strong> Nevada (Clark, Washoe), Utah and Colorado rank high; check each portal for a bot challenge first. Each new adapter turns a county from <code>found_unverified</code> into <code>success</code>.</li>
+  <li><strong>Decide how to treat blocked portals</strong> (the <code>county-taxes</code> family): a data feed, an agreement with the vendor, or leave them on the web-research route.</li>
+  <li><strong>Settle what "bill" means.</strong> The adapters print the portal's tax statement page, which is not the mailed bill. Confirm that satisfies the requirement.</li>
+  <li><strong>Add automated tests</strong> for the stages, the parcel matching and the Django views, then measure cost and time per search.</li>
+  <li><strong>Decide whether an unmatched address should wait for a county-level agency.</strong> When no single parcel matches in an adapter county, the pipeline still researches the county's agency on the web, which took about 4.5 minutes in the Ravenna test, before showing the suggestions. The agency is only a county-level, unvalidated answer. Skipping it (the agency is read from the statement once a parcel is chosen) would return the suggestions in seconds.</li>
+  <li><strong>Retire the Streamlit UI</strong> once the Django UI is accepted, and clear the dead code listed in the developer guide.</li>
+  <li><strong>Before sharing the web UI:</strong> authentication, a real secret key, <code>DEBUG</code> off, and a job queue instead of worker threads.</li>
+</ol>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Search Flow: steps and data flow</title>
+<style>
+  :root{--bg:#ffffff;--text:#1d2433;--muted:#5b6577;--line:#dde2ea;--panel:#f5f7fa;--accent:#1f5fbf;--good:#1b7a46;--warn:#a65b00;--bad:#b3261e;--code:#eef1f6;--s1:#e3edfb;--s2:#e4f3ea;--s3:#fbefd9;--src:#ffffff}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#12161d;--text:#e6e9ef;--muted:#9aa4b5;--line:#2b3342;--panel:#1a2029;--accent:#7aa7f0;--good:#5cc98a;--warn:#e6a756;--bad:#ef8a83;--code:#222a36;--s1:#1d2b44;--s2:#1c3226;--s3:#3a2f1a;--src:#12161d}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:1040px;margin:0 auto;padding:32px 16px 90px}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+  h2{font-size:1.4rem;margin:46px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+  h3{font-size:1.08rem;margin:24px 0 6px}
+  p,li{max-width:80ch}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0}
+  .box>:first-child{margin-top:0}.box>:last-child{margin-bottom:0}
+  .key{border-left:4px solid var(--accent)}.caution{border-left:4px solid var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.88rem}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel)}
+  .tablewrap{overflow-x:auto}
+  code{background:var(--code);border-radius:4px;padding:1px 5px;font-size:.85em}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:.8rem;line-height:1.45}
+  pre code{background:none;padding:0}
+  .ok{color:var(--good);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  nav ol{columns:2;column-gap:32px;padding-left:20px;margin:6px 0 0}nav a{color:var(--accent)}
+  svg{width:100%;height:auto;display:block;margin:14px 0}
+  svg text{fill:var(--text);font:13px system-ui,-apple-system,"Segoe UI",sans-serif}
+  svg .small{font-size:11.5px;fill:var(--muted)}
+  svg .title{font-weight:700;font-size:14px}
+  svg .st1{fill:var(--s1);stroke:var(--accent);stroke-width:1.4}
+  svg .st2{fill:var(--s2);stroke:var(--good);stroke-width:1.4}
+  svg .st3{fill:var(--s3);stroke:var(--warn);stroke-width:1.4}
+  svg .src{fill:var(--src);stroke:var(--line);stroke-width:1.2;stroke-dasharray:4 3}
+  svg .io{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
+  svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none;marker-end:url(#head)}
+  svg .link{stroke:var(--line);stroke-width:1.2;fill:none;stroke-dasharray:4 3}
+  .trace td:first-child{white-space:nowrap}
+  @media (max-width:640px){nav ol{columns:1}h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Search Flow: steps and data flow</h1>
+<p class="sub">How the single-collector pipeline finds a parcel and its tax collecting agency, starting from a parcel address, a parcel ID, or both.
+Every example uses real output from test runs on 2026-11-17.</p>
+
+<nav class="box">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#why">What changed and why</a></li>
+    <li><a href="#diagram">Data-flow diagram</a></li>
+    <li><a href="#stages">The three stages in detail</a></li>
+    <li><a href="#validation">What each stage validates</a></li>
+    <li><a href="#examples">Worked examples</a></li>
+    <li><a href="#dynamic">What is dynamic and what is still fixed</a></li>
+    <li><a href="#status">Statuses and the result record</a></li>
+    <li><a href="#limits">Limits</a></li>
+  </ol>
+</nav>
+
+<h2 id="why">1. What changed and why</h2>
+<p>A search for <code>4800 Ravenna Ave NE, Seattle, WA 98105</code> returned the county but no parcel ID and no parcel address. The cause: the Census geocoder
+accepts an address by estimating a position along the street, but King County's own records contain <strong>no parcel numbered 4800 Ravenna Ave NE</strong>
+(the nearest are 4745, 4740, 4735, 4727 and 4711). The old code returned a blank with no explanation, and it never showed the parcel's own address even
+when a parcel was found. The agency shown came from fixed text in the code, so it appeared whether or not a parcel existed.</p>
+<div class="box key">
+  <p><strong>The redesign.</strong> The search is now three named stages, each of which validates what it finds and says why when it cannot:</p>
+  <ol>
+    <li><code>validate_address</code>: is the address real, and where is it?</li>
+    <li><code>find_validate_parcel</code>: which parcel is it? Search by address, by parcel ID, or both (cross-checked). Returns the parcel ID <em>and</em> the parcel's address. When there is no exact parcel, it explains why and suggests the nearest ones.</li>
+    <li><code>find_validate_agency</code>: who collects the tax? Read from the county's own statement page and checked against the parcel ID.</li>
+  </ol>
+  <p>No agency name or address is typed into the code, and there is no fixed list of states or agencies. The county, the parcel and the agency are all found at run time.</p>
+</div>
+
+<h2 id="diagram">2. Data-flow diagram</h2>
+<p>Solid arrows carry the data named on them from one stage to the next. Dashed boxes are the live sources each stage reads.</p>
+
+<svg viewBox="0 0 960 760" role="img" aria-label="Data flow: input, stage 1 validate address, stage 2 find or validate parcel, stage 3 find or validate agency, result record">
+  <defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+
+  <!-- input -->
+  <rect class="io" x="250" y="8" width="460" height="64" rx="8"/>
+  <text class="title" x="480" y="30" text-anchor="middle">Search input (any one of three)</text>
+  <text class="small" x="480" y="49" text-anchor="middle">1. parcel address   2. parcel ID + state + county   3. both</text>
+  <text class="small" x="480" y="64" text-anchor="middle">e.g. "4800 Ravenna Ave NE, Seattle, WA 98105"</text>
+  <path class="arrow" d="M480 72V100"/>
+
+  <!-- stage 1 -->
+  <rect class="st1" x="250" y="100" width="460" height="104" rx="8"/>
+  <text class="title" x="480" y="124" text-anchor="middle">Stage 1: validate_address</text>
+  <text x="480" y="145" text-anchor="middle">Is the address real? Where is it?</text>
+  <text class="small" x="480" y="164" text-anchor="middle">Geocode → state, county, coordinates → city and school district</text>
+  <text class="small" x="480" y="181" text-anchor="middle">Flags: input state or county differs from the Census</text>
+  <text class="small" x="480" y="196" text-anchor="middle">(skipped when searching by parcel ID alone)</text>
+  <rect class="src" x="12" y="108" width="214" height="88" rx="8"/>
+  <text class="title" x="119" y="130" text-anchor="middle">US Census (live)</text>
+  <text class="small" x="119" y="150" text-anchor="middle">Geocoder (address → point)</text>
+  <text class="small" x="119" y="166" text-anchor="middle">TIGERweb (point → boundaries)</text>
+  <text class="small" x="119" y="182" text-anchor="middle">county name → county code</text>
+  <path class="link" d="M226 152H250"/>
+  <path class="arrow" d="M480 204V246"/>
+  <text class="small" x="494" y="230">address_validation: normalized address, street, ZIP, county code, boundaries</text>
+
+  <!-- stage 2 -->
+  <rect class="st2" x="250" y="246" width="460" height="176" rx="8"/>
+  <text class="title" x="480" y="270" text-anchor="middle">Stage 2: find_validate_parcel</text>
+  <text x="480" y="291" text-anchor="middle">Which parcel is it, and what is its address?</text>
+  <text class="small" x="480" y="314" text-anchor="middle">county has an adapter?  yes → search the county's parcel records</text>
+  <text class="small" x="480" y="331" text-anchor="middle">by parcel ID: exists?  by address: exact match? several? none?</text>
+  <text class="small" x="480" y="348" text-anchor="middle">none → list the nearest parcels on the same street</text>
+  <text class="small" x="480" y="365" text-anchor="middle">both given → does the parcel's address match the address?</text>
+  <text class="small" x="480" y="388" text-anchor="middle">no adapter → Claude searches the web (parcel is marked unverified)</text>
+  <text class="small" x="480" y="410" text-anchor="middle">matched | ambiguous | not_found | county_needed | county_unknown</text>
+  <rect class="src" x="734" y="254" width="214" height="160" rx="8"/>
+  <text class="title" x="841" y="276" text-anchor="middle">County parcel records</text>
+  <text class="small" x="841" y="296" text-anchor="middle">public GIS service of the county</text>
+  <text class="small" x="841" y="312" text-anchor="middle">(Maricopa AZ, King WA today)</text>
+  <text class="title" x="841" y="346" text-anchor="middle">Claude + web search</text>
+  <text class="small" x="841" y="366" text-anchor="middle">for any other county</text>
+  <text class="small" x="841" y="382" text-anchor="middle">(parcel + address + agency</text>
+  <text class="small" x="841" y="398" text-anchor="middle">come back in one answer)</text>
+  <path class="link" d="M734 334H710"/>
+  <path class="arrow" d="M480 422V468"/>
+  <text class="small" x="494" y="450">parcel: status, parcel_id, parcel_address, verified, candidates, reason</text>
+
+  <!-- stage 3 -->
+  <rect class="st3" x="250" y="468" width="460" height="168" rx="8"/>
+  <text class="title" x="480" y="492" text-anchor="middle">Stage 3: find_validate_agency</text>
+  <text x="480" y="513" text-anchor="middle">Who collects the tax?</text>
+  <text class="small" x="480" y="536" text-anchor="middle">parcel matched + adapter → open the county's statement page</text>
+  <text class="small" x="480" y="553" text-anchor="middle">Claude reads the agency from that page; check the parcel ID is on it</text>
+  <text class="small" x="480" y="570" text-anchor="middle">print the statement to PDF</text>
+  <text class="small" x="480" y="590" text-anchor="middle">matched, no adapter → use the web research (unvalidated)</text>
+  <text class="small" x="480" y="610" text-anchor="middle">no single parcel → agency for the county only (unvalidated, no bill)</text>
+  <text class="small" x="480" y="628" text-anchor="middle">single | multiple | unknown collector model</text>
+  <rect class="src" x="12" y="476" width="214" height="152" rx="8"/>
+  <text class="title" x="119" y="498" text-anchor="middle">County statement page</text>
+  <text class="small" x="119" y="518" text-anchor="middle">county treasurer's portal,</text>
+  <text class="small" x="119" y="534" text-anchor="middle">driven in a headless browser</text>
+  <text class="small" x="119" y="558" text-anchor="middle">Agency name, office address,</text>
+  <text class="small" x="119" y="574" text-anchor="middle">taxing bodies and the PDF</text>
+  <text class="small" x="119" y="590" text-anchor="middle">all come from this page,</text>
+  <text class="small" x="119" y="606" text-anchor="middle">not from the code</text>
+  <path class="link" d="M226 552H250"/>
+  <path class="arrow" d="M480 636V676"/>
+  <text class="small" x="494" y="662">agency + tax_bill (PDF path)</text>
+
+  <!-- result -->
+  <rect class="io" x="250" y="676" width="460" height="72" rx="8"/>
+  <text class="title" x="480" y="698" text-anchor="middle">Result record (output/manifest.json)</text>
+  <text class="small" x="480" y="718" text-anchor="middle">status, query, address_validation, parcel, agency, tax_bill, flags</text>
+  <text class="small" x="480" y="736" text-anchor="middle">+ downloads/{state}/{county}/{parcel}_{year}_bill.pdf</text>
+</svg>
+
+<h2 id="stages">3. The three stages in detail</h2>
+<h3>Stage 1: <code>validate_address(query)</code></h3>
+<ol>
+  <li>If there is no address (a parcel-only search), the stage is skipped; the parcel's own address is validated after stage 2 finds it.</li>
+  <li>The Census geocoder returns the normalized address, coordinates and county code. No match → <code>valid: false</code> and the search ends with <code>invalid_address</code> (unless a parcel ID was also given).</li>
+  <li>TIGERweb takes the coordinates and returns the county, the incorporated city (empty means unincorporated) and the school districts.</li>
+  <li>The state is read from the normalized address. If the user typed a different state or county, a flag is added and the Census answer is used.</li>
+</ol>
+<p>Output: <code>address_validation</code>. A valid address here only means the Census can place it. The Census interpolates along the street, so the address might not exist as a parcel; stage 2 settles that.</p>
+
+<h3>Stage 2: <code>find_validate_parcel(query, address_check)</code></h3>
+<ol>
+  <li><strong>Find the county.</strong> From the validated address, or, for a parcel-only search, from the state and county the user gave: the Census resolves the name to a county code (<code>King</code> in <code>WA</code> → <code>53033</code>). A parcel number is only unique inside one county, so without either, the status is <code>county_needed</code>.</li>
+  <li><strong>Choose the source.</strong> If the county has an adapter, search its parcel records (verified). Otherwise Claude searches the web (unverified).</li>
+  <li><strong>Search by parcel ID:</strong> the parcel either exists, with its address, or does not (<code>not_found</code>, with the reason). If an address was also given, the parcel's address is compared with it; a mismatch adds a flag.</li>
+  <li><strong>Search by address:</strong> take the distinctive word of the street (RAVENNA), fetch the parcels on that street in that ZIP, and keep those whose street name is at least 85% similar to the address. Then:
+    <ul>
+      <li>exactly one with the same house number → <code>matched</code></li>
+      <li>several with the same house number (for example a condominium) → <code>ambiguous</code>, with all of them listed</li>
+      <li>none → <code>not_found</code>, with the five nearest house numbers on that street, and a reason</li>
+    </ul></li>
+</ol>
+<p>The code never picks a nearby parcel for the user: a bill for the wrong property is worse than no bill. The user chooses from the suggestions, or enters a parcel ID.</p>
+<p>Output: <code>parcel</code> with <code>status</code>, <code>parcel_id</code>, <code>parcel_address</code>, <code>full_address</code>, <code>verified</code>, <code>source</code>, <code>candidates</code>, <code>reason</code> and, when both inputs were given, <code>address_matches_input</code>.</p>
+
+<h3>Stage 3: <code>find_validate_agency(query, address_check, parcel)</code></h3>
+<ol>
+  <li><strong>Parcel matched and the county has an adapter:</strong> open the county's statement page for that parcel in a headless browser. Claude reads the page text and returns the agency name, the office or payment address printed on it, the taxing bodies it itemises, and any other office it says collects part of the tax. The portal's address is taken from the page's own URL.</li>
+  <li><strong>Validate:</strong> the parcel number must appear on the statement page. Only then is the agency marked <code>validated</code>.</li>
+  <li><strong>Collector model:</strong> <code>multiple</code> if a separate collector is named; <code>single</code> if the statement itemises two or more taxing bodies on one bill; otherwise <code>unknown</code>.</li>
+  <li><strong>Save the statement</strong> as a PDF. If the portal script fails, the stage falls back to web research and says so in a flag.</li>
+  <li><strong>Parcel matched, no adapter:</strong> use Claude's web research from stage 2. Not validated; the bill link, if any, is downloaded.</li>
+  <li><strong>No single parcel:</strong> report the agency for the county only (<code>county_level_search</code>), clearly marked unvalidated, with no bill.</li>
+</ol>
+<p>Output: <code>agency</code> (name, address, portal, taxing bodies, separate collectors, collector model, checks) and <code>tax_bill</code>.</p>
+
+<h2 id="validation">4. What each stage validates</h2>
+<div class="tablewrap"><table>
+  <tr><th>Stage</th><th>Check</th><th>If it fails</th></tr>
+  <tr><td>1</td><td>The Census can place the address</td><td><code>invalid_address</code> with the reason</td></tr>
+  <tr><td>1</td><td>Input state and county agree with the Census</td><td>Flag; the Census value is used</td></tr>
+  <tr><td>1</td><td>The geocoder and TIGERweb agree on the county</td><td>Flag</td></tr>
+  <tr><td>2</td><td>The parcel ID exists in the county's records</td><td><code>parcel_not_found</code> with the reason</td></tr>
+  <tr><td>2</td><td>A parcel exists at the house number and street (fuzzy street match)</td><td><code>parcel_not_found</code> + the nearest parcels</td></tr>
+  <tr><td>2</td><td>Exactly one parcel has that address</td><td><code>parcel_ambiguous</code> + all of them</td></tr>
+  <tr><td>2</td><td>Parcel ID and address describe the same property (both given)</td><td>Flag; <code>address_matches_input: false</code></td></tr>
+  <tr><td>2</td><td>The county is known (state + county resolve to one county)</td><td><code>county_needed</code> or <code>county_unknown</code></td></tr>
+  <tr><td>3</td><td>The parcel number appears on the county statement</td><td><code>validated: false</code> with a warning in <code>checks</code></td></tr>
+  <tr><td>3</td><td>The statement is for a stated tax year</td><td>Recorded in <code>checks</code></td></tr>
+  <tr><td>3</td><td>Overall: parcel verified and agency validated</td><td>Otherwise the status is <code>found_unverified</code>, not <code>success</code></td></tr>
+</table></div>
+
+<h2 id="examples">5. Worked examples</h2>
+
+<h3>A. Search by address: <code>400 Broad St, Seattle, WA 98109</code></h3>
+<div class="tablewrap"><table class="trace">
+  <tr><th>Step</th><th>What happens</th><th>Data produced</th></tr>
+  <tr><td>Stage 1</td><td>Census geocodes the address; TIGERweb returns the boundaries</td><td>Normalized <code>400 BROAD ST, SEATTLE, WA, 98109</code>; King County (<code>53033</code>); city Seattle; school district Seattle Public Schools</td></tr>
+  <tr><td>Stage 2</td><td>King County has an adapter. Fetch parcels with "BROAD" in ZIP 98109; keep the street-name matches; one has house number 400</td><td><code>matched</code>: parcel <code>1985200495</code>, address <code>400 BROAD ST</code>, verified, matches input</td></tr>
+  <tr><td>Stage 3</td><td>Open King County's payment portal for that parcel; Claude reads the page text</td><td>Agency <code>Treasury Operations</code>, office <code>King Street Center, 201 South Jackson Street #710 Seattle, WA 98104</code>, portal <code>https://payment.kingcounty.gov</code></td></tr>
+  <tr><td>Validate</td><td>Parcel number found on the statement page; tax year 2026</td><td><code>validated: true</code>; 14 taxing bodies itemised (State School, Local School, County, City, Port, Sound Transit, Fire, Hospital and others) so <code>collector_model: single</code>; PDF saved</td></tr>
+  <tr><td>Result</td><td></td><td><span class="ok">success</span></td></tr>
+</table></div>
+
+<h3>B. The reported case: <code>4800 Ravenna Ave NE, Seattle, WA 98105</code></h3>
+<div class="tablewrap"><table class="trace">
+  <tr><th>Step</th><th>What happens</th><th>Data produced</th></tr>
+  <tr><td>Stage 1</td><td>Census accepts the address (interpolated along the street)</td><td><code>valid: true</code>, King County</td></tr>
+  <tr><td>Stage 2</td><td>Fetch parcels with "RAVENNA" in ZIP 98105; keep street names like "RAVENNA AVE NE" (so "NE RAVENNA BLVD" is a different street and is dropped); none has house number 4800</td><td><code>not_found</code> with the reason "No parcel at '4800 RAVENNA AVE NE' exists in the King County records, although the Census placed the address on that street" and five suggestions:
+    <br>4745 (<code>0925049175</code>), 4740 (<code>0925049071</code>), 4735 (<code>0925049209</code>), 4727 (<code>0925049349</code>), 4711 (<code>0925049402</code>)</td></tr>
+  <tr><td>Stage 3</td><td>No single parcel, so there is no statement to open. Claude researches the county</td><td>Agency <code>King County Treasury Operations</code>, <code>validated: false</code>, basis <code>county_level_search</code>; no bill</td></tr>
+  <tr><td>Result</td><td></td><td><span class="warn">parcel_not_found</span>: no blank, but a reason and a way forward</td></tr>
+  <tr><td>User picks 4745</td><td>The UI re-runs the search by parcel ID (<code>0925049175</code>, King County)</td><td>Stage 1 runs on the parcel's own address <code>4745 RAVENNA AVE NE, SEATTLE, WA, 98105</code>; stage 3 reads the statement; PDF saved</td></tr>
+  <tr><td>Result</td><td></td><td><span class="ok">success</span></td></tr>
+</table></div>
+
+<h3>C. Search by parcel ID only: <code>118-50-094</code>, state <code>AZ</code>, county <code>Maricopa</code></h3>
+<div class="tablewrap"><table class="trace">
+  <tr><th>Step</th><th>What happens</th><th>Data produced</th></tr>
+  <tr><td>Stage 1</td><td>No address, so the stage is skipped for now</td><td><code>valid: null</code></td></tr>
+  <tr><td>Stage 2</td><td>The Census resolves "Maricopa" in AZ to county <code>04013</code>; Maricopa has an adapter; the parcel is looked up by number in the Assessor's records</td><td><code>matched</code>: address <code>330 W HOLLY ST</code>, verified</td></tr>
+  <tr><td>Stage 1 again</td><td>Validate the parcel's own address</td><td><code>330 W HOLLY ST, PHOENIX, AZ, 85003</code>, Maricopa County</td></tr>
+  <tr><td>Stage 3</td><td>Open the Treasurer's page, choose the latest year, create the payment coupon; Claude reads the page</td><td>Agency <code>Maricopa County - Treasurer's Office</code>, <code>301 W. Jefferson St. Suite 100, Phoenix, AZ 85003</code>; the parcel number is on the page; <code>collector_model: unknown</code> because the page does not itemise taxing bodies</td></tr>
+  <tr><td>Result</td><td></td><td><span class="ok">success</span></td></tr>
+</table></div>
+
+<h3>D. Both inputs, and they disagree: address <code>330 W Holly St, Phoenix</code> with parcel <code>112-21-086</code></h3>
+<p>Stage 1 validates the address. Stage 2 finds parcel <code>112-21-086</code> in the county's records, but its address is <code>2 N CENTRAL AVE</code>. The result is <code>matched</code> with
+<code>address_matches_input: false</code> and the flag "The parcel's address (2 N CENTRAL AVE) differs from the address entered (330 W HOLLY ST)". The user is told the two do not describe the same property rather than one input silently winning.</p>
+
+<h3>E. An address that has several parcels: <code>721 Pine St, Seattle, WA 98101</code></h3>
+<p>Stage 2 finds three parcels with that exact address (<code>6792120000</code>, <code>6195000000</code>, <code>1976700411</code>). The status is <code>parcel_ambiguous</code>: "3 parcels share the address '721 PINE ST' (for example a condominium building). Pick one, or enter its parcel id." Nothing is guessed, and stage 3 reports the county-level agency only.</p>
+
+<h3>F. A county with no adapter: <code>238 Filmore St, Riverside, NJ 08075</code></h3>
+<div class="tablewrap"><table class="trace">
+  <tr><th>Step</th><th>What happens</th><th>Data produced</th></tr>
+  <tr><td>Stage 1</td><td>Census geocode and boundaries</td><td><code>238 FILMORE ST, RIVERSIDE, NJ, 08075</code></td></tr>
+  <tr><td>Stage 2</td><td>Burlington County has no adapter, so Claude searches the web</td><td>Parcel <code>Block 3203, Lot 17</code> at <code>238 FILMORE ST, RIVERSIDE, NJ 08075</code>, <code>verified: false</code> (third-party source), with the flag "not verified against county records"</td></tr>
+  <tr><td>Stage 3</td><td>Reuse the web research</td><td>Agency <code>Riverside Township Tax Collector</code>, <code>Riverside Township, PO Box 188, Riverside, NJ 08075</code>; taxing bodies: Burlington County, Riverside Township, Riverside Township School District; <code>validated: false</code>; no bill (the portal needs an interactive lookup)</td></tr>
+  <tr><td>Result</td><td></td><td><span class="warn">found_unverified</span>: useful, but not confirmed against county records</td></tr>
+</table></div>
+<p>Web research gives slightly different wording from run to run (an earlier run of this address returned the parcel as <code>3203 17</code> and a street address for the tax collector's office), which is another reason these results are labelled unverified. This shows the pipeline is not limited to a list of states: a fragmented state is searched the same way and the agency is found live. The cost is trust, which is why the status says so.</p>
+
+<h2 id="dynamic">6. What is dynamic and what is still fixed</h2>
+<div class="tablewrap"><table>
+  <tr><th>Found at run time</th><th>Still fixed in the code</th></tr>
+  <tr><td>
+    <ul>
+      <li>State, county, coordinates, city, school districts (Census)</li>
+      <li>County code from a state and county name (Census)</li>
+      <li>Parcel IDs, parcel addresses and nearby parcels (county records)</li>
+      <li>Agency name, office address and portal address (the county's statement page)</li>
+      <li>Taxing bodies and separate collectors (the statement page or web research)</li>
+      <li>The bill PDF (the statement page)</li>
+    </ul></td>
+    <td>
+    <ul>
+      <li><strong>The county adapters.</strong> Two exist (Maricopa AZ, King WA): the address of each county's public GIS service and the clicks needed to reach the statement. Any other county goes through Claude's web research, which is slower and unverified. Adding a county is one new module.</li>
+      <li>Matching thresholds: street names 85% similar, five suggestions.</li>
+      <li>The Census boundary layer numbers.</li>
+      <li>The state-ranking tab uses a reference file of single-collector states. The search does not use it.</li>
+    </ul></td></tr>
+</table></div>
+<p>Removed in this redesign: the Tier 1 gate that skipped fragmented states, the agency name, address and portal text that was typed into each county script, and the single catch-all <code>success</code> status.</p>
+
+<h2 id="status">7. Statuses and the result record</h2>
+<div class="tablewrap"><table>
+  <tr><th>Status</th><th>Meaning</th></tr>
+  <tr><td><code>success</code></td><td>The parcel is in the county's records and the agency was read from the county's statement, with the parcel number confirmed on it</td></tr>
+  <tr><td><code>found_unverified</code></td><td>A parcel and agency were found by web research only</td></tr>
+  <tr><td><code>exception_multi_agency</code></td><td>The agency was found, but a separate city, school or special-district collector was reported</td></tr>
+  <tr><td><code>agency_not_found</code></td><td>The parcel was found but no agency was identified</td></tr>
+  <tr><td><code>parcel_not_found</code></td><td>No parcel at that address or with that ID; the reason and nearest parcels are included</td></tr>
+  <tr><td><code>parcel_ambiguous</code></td><td>Several parcels share the address; they are all listed</td></tr>
+  <tr><td><code>county_needed</code> / <code>county_unknown</code></td><td>A parcel ID was given without a usable state and county</td></tr>
+  <tr><td><code>invalid_address</code></td><td>The Census cannot place the address</td></tr>
+  <tr><td><code>error</code></td><td>The search raised an error; the message is in <code>reason</code></td></tr>
+</table></div>
+<pre><code>{
+  "status": "parcel_not_found",
+  "reason": "No parcel at '4800 RAVENNA AVE NE' exists in the King County records, ...",
+  "query": { "address": "4800 Ravenna Ave NE, Seattle, WA 98105", "search_mode": "address" },
+  "address_validation": { "valid": true, "normalized_address": "4800 RAVENNA AVE NE, SEATTLE, WA, 98105",
+                          "county": "King County", "county_code": "53033", "city": ["Seattle city"], ... },
+  "parcel": { "status": "not_found", "verified": false, "source": "county_gis",
+              "candidates": [ { "parcel_id": "0925049175", "parcel_address": "4745 RAVENNA AVE NE", ... }, ... ] },
+  "agency": { "status": "found", "validated": false, "basis": "county_level_search",
+              "agency_name": "King County Treasury Operations", "collector_model": "single", ... },
+  "tax_bill": { "available": false, "reason": "no single parcel was matched" },
+  "flags": []
+}</code></pre>
+
+<h2 id="limits">8. Limits</h2>
+<ul>
+  <li><strong>Only two counties are verified end to end.</strong> Elsewhere the parcel and agency come from web research and are marked unverified. A few of those lookups will be wrong; the status and flags are there so they are not mistaken for confirmed results.</li>
+  <li><strong>A search can take minutes</strong> in a county without an adapter, and about a minute with one. Cost per search has not been measured.</li>
+  <li><strong>The agency is read by Claude from the page text.</strong> It is checked against the parcel number on the page, but the wording (for example "Treasury Operations" rather than "King County Treasury Operations") is the portal's own.</li>
+  <li><strong>Some portals block automation</strong> (San Francisco and Orange County FL sit behind a Cloudflare challenge). These would end in the web-research route and a missing bill; the project does not bypass such protection.</li>
+  <li><strong>Street matching is fuzzy.</strong> It tolerates abbreviations (AVE/AV) but treats a differently named street (NE RAVENNA BLVD) as a different street. Unusual address forms (ranges, corner lots) may need manual parcel entry.</li>
+  <li><strong>Property addresses are sent</strong> to the Census, the county services and the Claude deployment. Confirm this fits your data policy.</li>
+</ul>
+
+</main>
+</body>
+</html>

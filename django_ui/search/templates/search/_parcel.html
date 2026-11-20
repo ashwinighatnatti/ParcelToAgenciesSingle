@@ -1,0 +1,31 @@
+{% load search_extras %}
+{% if parcel.status == "matched" %}
+  <dl>
+    <dt>Parcel ID</dt><dd><strong>{{ parcel.parcel_id }}</strong></dd>
+    <dt>Parcel address</dt><dd><strong>{{ parcel.parcel_address|default:"not given" }}</strong></dd>
+    <dt>Verified in county records</dt><dd>{% if parcel.verified %}<span class="good">yes</span>{% else %}<span class="warn">no</span> (source: {{ parcel.source|spaced|default:"web research" }}){% endif %}</dd>
+    {% if parcel.address_matches_input is False %}<dt>Address check</dt><dd class="warn">The parcel's address does not match the address entered.</dd>{% endif %}
+  </dl>
+{% else %}
+  <p class="warn">{{ parcel.reason }}</p>
+{% endif %}
+{% for flag in parcel.flags %}<p class="warn">{{ flag }}</p>{% endfor %}
+{% if parcel.candidates %}
+  <h3>Suggested parcels</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Parcel ID</th><th>Parcel address</th><th>City</th><th>ZIP</th><th></th></tr>
+    {% for c in parcel.candidates %}
+    <tr>
+      <td>{{ c.parcel_id }}</td><td>{{ c.parcel_address }}</td><td>{{ c.city }}</td><td>{{ c.zip }}</td>
+      <td>
+        <form method="post" action="{% url 'use_parcel' %}">{% csrf_token %}
+          <input type="hidden" name="parcel_id" value="{{ c.parcel_id }}">
+          <input type="hidden" name="state" value="{{ parcel.state }}">
+          <input type="hidden" name="county" value="{{ parcel.county }}">
+          <button class="small" type="submit">Search with this parcel</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table></div>
+{% endif %}

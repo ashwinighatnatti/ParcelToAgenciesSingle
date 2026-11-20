@@ -1,0 +1,39 @@
+application_number,loan_parcel_id,parcel_number,property_address_1,city,state,zip_code,agency_name,reason
+10182398,808963,44 05 15 0 000 001.15X,No situs,NONE,AL,36544,Mobile County,"No street number and name (placeholder, road only, or land description)"
+10183068,811049,001-05579-002,0 Mill Bridge Rd.,Greenbrier,AR,72058,Faulkner County,"No street number and name (placeholder, road only, or land description)"
+10183068,811048,001-05579-000,0 Mill Bridge Rd.,Greenbrier,AR,72058,Faulkner County,"No street number and name (placeholder, road only, or land description)"
+10183067,811046,001-11088-001,+/- 6.7 acres Hwy 5,Benton,AR,72019,Saline County,"No street number and name (placeholder, road only, or land description)"
+10182933,809640,x,2240-2340 West University Drive,Mesa,AZ,85201,Maricopa County,Several street numbers in one address; search each one separately
+10182902,809604,5011305A,Parcel 50113105A,Litchfield Park,AZ,85340,Maricopa County,"No street number and name (placeholder, road only, or land description)"
+10007723,809599,211-46-004M,address not found ,Cave Creek,AZ,85331,Maricopa County,"No street number and name (placeholder, road only, or land description)"
+10182373,808933,X,95-305 Kahikinui Court Apt #201,Mililani,HI,96789,City and County of Honolulu,Several street numbers in one address; search each one separately
+10182468,809045,041521332000320,No situs address available,KEOKUK,IA,52632,Lee County (Keokuk Southern District),"No street number and name (placeholder, road only, or land description)"
+10182069,808629,X,Nna Dawson Loop Lot #4,Athol,ID,83801,Kootenai County,"No street number and name (placeholder, road only, or land description)"
+10182068,808628,X,Nka Lewellen Creek Rd. Lot #2,Athol,ID,83801,Kootenai County,"No street number and name (placeholder, road only, or land description)"
+10169809,810115,HIDE AWAY-003.0B,DUG HILL RD 0,Clarkson,KY,42726,Grayson County,"No street number and name (placeholder, road only, or land description)"
+10018122,149490,11-625-008-00,10591 BLUFF RD.,TRAVERSE CITY,M,49686,Peninsula Township (Grand Traverse),State 'M' is not a 2-letter code
+82579818,586447,01502200000006002954,MONTEREY LAKE OZARK,Camdenton,M0,65049,Camden County,"No street number and name (placeholder, road only, or land description)"
+10081467,747479,U396-002982-010061-000004,T19 MD BPP,CHERRYFIELD,ME,04622,Maine Unorganized Territory,"No street number and name (placeholder, road only, or land description)"
+10081467,747478,COLA-000013-000000-000015,ELL MEADOW RD,Columbia Falls,ME,04623,Columbia Town (Washington),"No street number and name (placeholder, road only, or land description)"
+10182868,809531,33-02-02-22-203-001,CENTRAL PARK DR,Okemos,MI,48864,Meridian Charter Township (Ingham),"No street number and name (placeholder, road only, or land description)"
+10182990,810908,010-4110-01150,NO SITUS ADDRESS,Duluth,MN,55810,Saint Louis County,"No street number and name (placeholder, road only, or land description)"
+10182990,810906,010-2745-00045,NO SITUS ADDRESS,Duluth,MN,55810,Saint Louis County,"No street number and name (placeholder, road only, or land description)"
+10181569,808117,13605000702900,TRACT D,KANSAS CITY,MO,64156,Clay County,"No street number and name (placeholder, road only, or land description)"
+10181070,809612,X,318 & 311 W Corporation Street ,DURHAM,NC,27701,Durham County,Several street numbers in one address; search each one separately
+10181120,810934,0103580007,NO SITUS,VALLEY,NE,68064,Douglas County,"No street number and name (placeholder, road only, or land description)"
+10181120,810932,0710243102,NO SITUS,VALLEY,NE,68064,Douglas County,"No street number and name (placeholder, road only, or land description)"
+10183069,811053,X12,1312 - 1340 West Elizabeth Ave,LINDEN,NJ,07036,Linden City (Union),Several street numbers in one address; search each one separately
+10182990,810913,021-468-02,0 BOYNTON LN,Reno,NV,89502,Washoe County,"No street number and name (placeholder, road only, or land description)"
+10182979,810881,072-014520-00,1325-1399 West Lane Avenue,Columbus,OH,43221,Franklin County,Several street numbers in one address; search each one separately
+10183038,810991,0000-27-07S-14E-1-002-00,80+/- acres located at E 2130,Boswell,OK,74727,Choctaw County,"No street number and name (placeholder, road only, or land description)"
+10141966,810116,189111258,address not found,Oklahoma City,OK,73107,Oklahoma County,"No street number and name (placeholder, road only, or land description)"
+10178948,809146,0022-09-002 020-0-023-00, 06811,ALTUS,OK,73521,Jackson County,"No street number and name (placeholder, road only, or land description)"
+10072234,384465,tstpar,test,Angeles,PR,00611,Autauga County ,"No street number and name (placeholder, road only, or land description)"
+10180058,804137,103-59-032-002-000-02,No situs address,MITCHELL,SD,57301,Hanson County,"No street number and name (placeholder, road only, or land description)"
+10183069,811058,X02,3292 & 3558 E Holmes Road,MEMPHIS,TN,38118,Shelby County,Several street numbers in one address; search each one separately
+10183010,810947,051-1-080-000,287-289 College st ,Burlington,VT,05401,Burlington City (Chittenden),Several street numbers in one address; search each one separately
+10170835,755036,00153532C,No situs available,WILLISTON,VT,05495,Calcasieu Parish,"No street number and name (placeholder, road only, or land description)"
+10182859,809513,01-10-140,US Route 60 E,Ona,WV,25545,Cabell County,"No street number and name (placeholder, road only, or land description)"
+10182859,809512,01-10-138,US Route 60 E,Ona,WV,25545,Cabell County,"No street number and name (placeholder, road only, or land description)"
+10182859,809511,01-10-24.3,US Route 60 E,Ona,WV,22545,Cabell County,"No street number and name (placeholder, road only, or land description)"
+10169340,744924,121498,DEWAR DR,ROCK SPRINGS,WY,82901,Sweetwater County,"No street number and name (placeholder, road only, or land description)"

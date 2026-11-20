@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solution workflow and architecture</title>
+<style>
+  :root{--bg:#ffffff;--text:#1d2433;--muted:#5b6577;--line:#dde2ea;--panel:#f5f7fa;--accent:#1f5fbf;--good:#1b7a46;--warn:#a65b00;--bad:#b3261e;--code:#eef1f6;--s1:#e3edfb;--s2:#e4f3ea;--s3:#fbefd9;--src:#ffffff}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#12161d;--text:#e6e9ef;--muted:#9aa4b5;--line:#2b3342;--panel:#1a2029;--accent:#7aa7f0;--good:#5cc98a;--warn:#e6a756;--bad:#ef8a83;--code:#222a36;--s1:#1d2b44;--s2:#1c3226;--s3:#3a2f1a;--src:#12161d}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:1040px;margin:0 auto;padding:32px 16px 90px}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+  h2{font-size:1.4rem;margin:46px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+  h3{font-size:1.08rem;margin:24px 0 6px}
+  p,li{max-width:80ch}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0}
+  .box>:first-child{margin-top:0}.box>:last-child{margin-bottom:0}
+  .key{border-left:4px solid var(--accent)}.caution{border-left:4px solid var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.88rem}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel)}
+  .tablewrap{overflow-x:auto}
+  code{background:var(--code);border-radius:4px;padding:1px 5px;font-size:.85em}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:.8rem;line-height:1.45}
+  pre code{background:none;padding:0}
+  .ok{color:var(--good);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  nav ol{columns:2;column-gap:32px;padding-left:20px;margin:6px 0 0}nav a{color:var(--accent)}
+  svg{width:100%;height:auto;display:block;margin:14px 0}
+  svg text{fill:var(--text);font:13px system-ui,-apple-system,"Segoe UI",sans-serif}
+  svg .small{font-size:11.5px;fill:var(--muted)}
+  svg .title{font-weight:700;font-size:14px}
+  svg .st1{fill:var(--s1);stroke:var(--accent);stroke-width:1.4}
+  svg .st2{fill:var(--s2);stroke:var(--good);stroke-width:1.4}
+  svg .st3{fill:var(--s3);stroke:var(--warn);stroke-width:1.4}
+  svg .src{fill:var(--src);stroke:var(--line);stroke-width:1.2;stroke-dasharray:4 3}
+  svg .io{fill:var(--panel);stroke:var(--line);stroke-width:1.2}
+  svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none;marker-end:url(#head)}
+  svg .link{stroke:var(--line);stroke-width:1.2;fill:none;stroke-dasharray:4 3}
+  .trace td:first-child{white-space:nowrap}
+  @media (max-width:640px){nav ol{columns:1}h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Solution workflow and architecture</h1>
+<p class="sub">How the single-collector pipeline validates an address, which public sources it uses, and how it finds the tax collecting agency.
+Examples are real output from runs on 2026-11-17.</p>
+
+<nav class="box"><strong>Contents</strong><ol>
+<li><a href="#what">What the solution does</a></li>
+<li><a href="#arch">Architecture</a></li>
+<li><a href="#flow">Workflow</a></li>
+<li><a href="#address">How the address is validated</a></li>
+<li><a href="#parcel">How the parcel is found</a></li>
+<li><a href="#agency">How the agency is found</a></li>
+<li><a href="#sources">Every public source used</a></li>
+<li><a href="#result">What comes back</a></li>
+<li><a href="#limits">Limits to know about</a></li>
+</ol></nav>
+
+<h2 id="what">1. What the solution does</h2>
+<p>You give it a <strong>parcel address</strong>, a <strong>parcel ID</strong> (with state and county), or both. It answers three questions in order:</p>
+<ol>
+<li><strong>Is the address real?</strong> (validate address)</li>
+<li><strong>Which parcel is it, and is that parcel in the county's records?</strong> (find / validate parcel)</li>
+<li><strong>Which agency collects the property tax on it?</strong> (find / validate agency)</li>
+</ol>
+<p>Nothing is looked up from a stored list of agencies. Every answer is fetched at search time from a public source, and the result says how well it was checked.</p>
+
+<h2 id="arch">2. Architecture</h2>
+<svg viewBox="0 0 960 590" role="img" aria-label="Architecture: user interfaces, the three-stage pipeline, public data sources and outputs">
+  <defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <rect class="io" x="40" y="8" width="250" height="56" rx="8"/>
+  <text class="title" x="165" y="32" text-anchor="middle">Django web UI</text><text class="small" x="165" y="50" text-anchor="middle">runs each search as a background job</text>
+  <rect class="io" x="310" y="8" width="250" height="56" rx="8"/>
+  <text class="title" x="435" y="32" text-anchor="middle">Command line</text><text class="small" x="435" y="50" text-anchor="middle">python -m single_collector.run</text>
+  <path class="arrow" d="M300 64V98"/>
+
+  <rect x="40" y="100" width="520" height="380" rx="10" fill="none" stroke="var(--line)" stroke-width="1.4"/>
+  <text class="small" x="52" y="116">PIPELINE  (single_collector/run.py)</text>
+  <rect class="st1" x="60" y="124" width="480" height="76" rx="8"/>
+  <text class="title" x="300" y="150" text-anchor="middle">1. Validate address</text><text class="small" x="300" y="170" text-anchor="middle">Is the address real? Which county, city, school districts?</text><text class="small" x="300" y="186" text-anchor="middle">stages.py + census.py</text>
+  <path class="arrow" d="M300 200V224"/>
+  <rect class="st2" x="60" y="226" width="480" height="76" rx="8"/>
+  <text class="title" x="300" y="252" text-anchor="middle">2. Find / validate parcel ID and address</text><text class="small" x="300" y="272" text-anchor="middle">County records for two counties; Claude web search elsewhere</text><text class="small" x="300" y="288" text-anchor="middle">stages.py + portals/</text>
+  <path class="arrow" d="M300 302V326"/>
+  <rect class="st3" x="60" y="328" width="480" height="76" rx="8"/>
+  <text class="title" x="300" y="354" text-anchor="middle">3. Find / validate agency</text><text class="small" x="300" y="374" text-anchor="middle">County statement page for two counties; Claude web research elsewhere</text><text class="small" x="300" y="390" text-anchor="middle">stages.py + portal.py + bill.py</text>
+  <rect class="io" x="60" y="420" width="480" height="48" rx="8"/>
+  <text class="title" x="300" y="440" text-anchor="middle">Confidence score + cost meter</text><text class="small" x="300" y="458" text-anchor="middle">confidence.py, cost.py (every Claude call is metered in agent.py)</text>
+
+  <rect class="src" x="640" y="124" width="290" height="76" rx="8"/>
+  <text class="title" x="785" y="150" text-anchor="middle">US Census Bureau</text><text class="small" x="785" y="170" text-anchor="middle">Geocoder + TIGERweb boundaries</text><text class="small" x="785" y="186" text-anchor="middle">free public web services</text>
+  <rect class="src" x="640" y="226" width="290" height="76" rx="8"/>
+  <text class="title" x="785" y="252" text-anchor="middle">County GIS parcel services</text><text class="small" x="785" y="272" text-anchor="middle">Maricopa Assessor, King County GIS</text><text class="small" x="785" y="288" text-anchor="middle">free public map services</text>
+  <rect class="src" x="640" y="328" width="290" height="76" rx="8"/>
+  <text class="title" x="785" y="354" text-anchor="middle">County treasurer websites</text><text class="small" x="785" y="374" text-anchor="middle">Maricopa Treasurer, King County Treasury</text><text class="small" x="785" y="390" text-anchor="middle">opened with a headless browser (Playwright)</text>
+  <rect class="src" x="640" y="440" width="290" height="92" rx="8"/>
+  <text class="title" x="785" y="464" text-anchor="middle">Claude on Azure AI Foundry</text><text class="small" x="785" y="484" text-anchor="middle">web search + web fetch tools</text><text class="small" x="785" y="500" text-anchor="middle">researches every other county</text><text class="small" x="785" y="516" text-anchor="middle">and reads the statement page text</text>
+  <path class="link" d="M540 162H640"/><path class="link" d="M540 264H640"/><path class="link" d="M540 366H640"/>
+  <path class="link" d="M540 280H600V486H640"/><path class="link" d="M540 382H600"/>
+
+  <rect class="io" x="40" y="506" width="150" height="56" rx="8"/><text class="title" x="115" y="529" text-anchor="middle">JSON result</text><text class="small" x="115" y="547" text-anchor="middle">manifest.json</text>
+  <rect class="io" x="210" y="506" width="170" height="56" rx="8"/><text class="title" x="295" y="529" text-anchor="middle">Tax bill PDFs</text><text class="small" x="295" y="547" text-anchor="middle">downloads/</text>
+  <rect class="io" x="400" y="506" width="160" height="56" rx="8"/><text class="title" x="480" y="529" text-anchor="middle">Search history</text><text class="small" x="480" y="547" text-anchor="middle">SQLite (web UI only)</text>
+  <path class="arrow" d="M300 480V506"/>
+</svg>
+<p>Solid arrows are the order of work; dashed lines are calls out to a public source.</p>
+<div class="tablewrap"><table>
+<tr><th>Part</th><th>Where</th><th>Role</th></tr>
+<tr><td>Web UI</td><td><code>django_ui/</code></td><td>Search form, result page, batch, history. Starts the pipeline as a background process and polls for the result.</td></tr>
+<tr><td>Pipeline</td><td><code>single_collector/run.py</code>, <code>stages.py</code></td><td>Runs the three stages, decides the status, adds confidence and cost.</td></tr>
+<tr><td>Census access</td><td><code>census.py</code></td><td>Address matching and boundary look-ups.</td></tr>
+<tr><td>County adapters</td><td><code>portals/maricopa_az.py</code>, <code>king_wa.py</code></td><td>One small file per county: parcel search in the county map service, and how to open the statement page.</td></tr>
+<tr><td>Claude research</td><td><code>portal.py</code>, <code>agent.py</code></td><td>Web research for counties without an adapter, and reading the text of a statement page.</td></tr>
+<tr><td>Bill capture</td><td><code>bill.py</code></td><td>Prints the statement page to PDF, or downloads a bill link.</td></tr>
+</table></div>
+
+<h2 id="flow">3. Workflow</h2>
+<svg viewBox="0 0 960 430" role="img" aria-label="Workflow: validate address, then parcel and agency by county adapter or by web research">
+  <defs><marker id="head2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>
+  <text class="small" x="360" y="34">County has an adapter (Maricopa AZ, King WA): verified route</text>
+  <text class="small" x="360" y="252">Any other county: web research route, not verified</text>
+  <rect class="io" x="20" y="165" width="130" height="70" rx="8"/><text class="title" x="85" y="195" text-anchor="middle">Search</text><text class="small" x="85" y="213" text-anchor="middle">address and/or ID</text>
+  <rect class="st1" x="170" y="165" width="150" height="70" rx="8"/><text class="title" x="245" y="192" text-anchor="middle">1. Validate</text><text class="title" x="245" y="210" text-anchor="middle">address</text>
+  <rect class="st2" x="360" y="55" width="180" height="80" rx="8"/><text class="title" x="450" y="80" text-anchor="middle">2. County records</text><text class="small" x="450" y="99" text-anchor="middle">exact address match, or ID lookup;</text><text class="small" x="450" y="115" text-anchor="middle">nearby parcels if no match</text>
+  <rect class="st3" x="600" y="55" width="180" height="80" rx="8"/><text class="title" x="690" y="80" text-anchor="middle">3. County statement</text><text class="small" x="690" y="99" text-anchor="middle">Claude reads the agency; parcel</text><text class="small" x="690" y="115" text-anchor="middle">number checked; PDF saved</text>
+  <rect class="st2" x="360" y="270" width="180" height="80" rx="8"/><text class="title" x="450" y="295" text-anchor="middle">2. Web search</text><text class="small" x="450" y="314" text-anchor="middle">Claude searches county sites</text><text class="small" x="450" y="330" text-anchor="middle">for the parcel number</text>
+  <rect class="st3" x="600" y="270" width="180" height="80" rx="8"/><text class="title" x="690" y="295" text-anchor="middle">3. Web research</text><text class="small" x="690" y="314" text-anchor="middle">Claude finds the collector;</text><text class="small" x="690" y="330" text-anchor="middle">bill downloaded if a link exists</text>
+  <rect class="io" x="830" y="165" width="110" height="70" rx="8"/><text class="title" x="885" y="195" text-anchor="middle">Result</text><text class="small" x="885" y="213" text-anchor="middle">+ score, cost</text>
+  <path class="arrow" d="M150 200H168"/>
+  <path class="arrow" d="M320 200H340V95H358"/><path class="arrow" d="M320 200H340V310H358"/>
+  <path class="arrow" d="M540 95H598"/><path class="arrow" d="M540 310H598"/>
+  <path class="arrow" d="M780 95H805V200H828"/><path class="arrow" d="M780 310H805V200H828"/>
+  <text class="small" x="20" y="400">Early stops: address not found and no parcel ID given (invalid_address); no parcel found (parcel_not_found, with nearby suggestions on the verified route).</text>
+  <text class="small" x="20" y="418">A parcel ID search skips the address check and starts at stage 2; it needs the state and county because a parcel number is only unique inside one county.</text>
+</svg>
+
+<h2 id="address">4. How the address is validated</h2>
+<p>Validation uses only the <strong>US Census Bureau</strong>. Nothing is stored locally.</p>
+<ol>
+<li><strong>Match the address.</strong> The address is sent to the Census Geocoder (one at a time, or in one batch call when 10 or more are searched together). If Census cannot match it, the address is <code>invalid</code> and the reason is stated.</li>
+<li><strong>Read the result.</strong> Census returns the standard form of the address, the state, the county, and a map point.</li>
+<li><strong>Look up boundaries at that point</strong> in TIGERweb: the county, the incorporated city (none means unincorporated), and the school districts.</li>
+<li><strong>Cross-check.</strong> If you also gave a state or county that disagrees with Census, the address is kept, Census wins, and a flag says so. If the geocoder and TIGERweb disagree on the county, that is flagged too.</li>
+</ol>
+<div class="box caution"><strong>What this does not prove.</strong> Census places an address by estimating a position along the street, so it can accept an address that has no parcel. That is why stage 2 checks the county's own records. Example: <code>4800 Ravenna Ave NE, Seattle</code> passed here, yet King County has no such parcel.</div>
+<p>For a parcel ID search there is no address to check, so stage 1 is skipped. Once the parcel is found, its own address is run through these same steps.</p>
+
+<h2 id="parcel">5. How the parcel is found</h2>
+<div class="tablewrap"><table>
+<tr><th>Situation</th><th>What happens</th><th>Checked against county records?</th></tr>
+<tr><td>Maricopa or King, search by address</td><td>The county map service is searched for parcels on that street and ZIP; the one with the same house number is the match. If none, the five nearest parcels on the street are suggested, and you can click one to search by its ID. Two or more at one address (for example condos) are listed to choose from. A nearby parcel is never picked automatically.</td><td class="ok">Yes</td></tr>
+<tr><td>Maricopa or King, search by ID</td><td>The ID is looked up in the county map service. If you also gave an address, the two are compared and a mismatch is flagged.</td><td class="ok">Yes</td></tr>
+<tr><td>Any other county</td><td>Claude searches the web (county assessor, GIS and treasurer sites) and returns the parcel number and where it came from.</td><td class="warn">No; marked unverified unless it was read from the county's own portal</td></tr>
+</table></div>
+
+<h2 id="agency">6. How the agency is found</h2>
+<h3>Verified route (Maricopa AZ, King WA)</h3>
+<ol>
+<li>A headless browser opens the county treasurer's property tax page for the parcel and shows the latest statement.</li>
+<li>The page text goes to Claude, which reads off the collecting agency, its payment address, the taxing bodies on the statement, and any separate collectors.</li>
+<li>The code checks that the <strong>parcel number appears on the page</strong>. Only then is the agency marked validated.</li>
+<li>The statement page is printed to a PDF and saved as the tax bill.</li>
+</ol>
+<h3>Web research route (all other counties)</h3>
+<ol>
+<li>Claude searches the web for the county's property tax collector and reads the pages it finds, using the Census boundaries from stage 1 as fixed facts.</li>
+<li>It returns the agency, payment address, portal link, taxing bodies and a bill link if one exists. A bill link is downloaded if it works.</li>
+<li>The answer is marked <code>found_unverified</code>, because no county statement was read.</li>
+</ol>
+<p>If a county's website script fails (for example the site changed), the pipeline falls back to web research and adds a flag saying so.</p>
+<p>Example, <code>12515 West Windsor Boulevard, Litchfield Park, AZ 85340</code>: Census matched the address and county (Maricopa), then the Assessor's map service returned parcel 508-12-628 at the same address, then the Treasurer's statement page showed that parcel and the agency <em>Maricopa County Treasurer's Office</em>. Status <code>success</code>, confidence 100.</p>
+
+<h2 id="sources">7. Every public source used</h2>
+<div class="tablewrap"><table>
+<tr><th>Source</th><th>Used in</th><th>For</th><th>How it is called</th></tr>
+<tr><td>US Census Geocoder, <code>geocoding.geo.census.gov/geocoder/geographies/onelineaddress</code></td><td>Stage 1</td><td>Match and standardise one address; get state, county and map point</td><td>HTTPS request, no key</td></tr>
+<tr><td>US Census Geocoder, <code>.../geographies/addressbatch</code></td><td>Stage 1</td><td>Same, for 10 or more addresses in one call</td><td>HTTPS file upload, no key</td></tr>
+<tr><td>Census TIGERweb, <code>tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Current</code></td><td>Stages 1 and 2</td><td>City, school districts and county at a point; turn a state and county name into a county code</td><td>ArcGIS REST query, no key</td></tr>
+<tr><td>Maricopa County Assessor GIS, <code>gis.mcassessor.maricopa.gov/arcgis/rest/services/Parcels</code></td><td>Stage 2</td><td>Find a parcel by address or ID (Maricopa)</td><td>ArcGIS REST query, no key</td></tr>
+<tr><td>King County GIS, <code>gismaps.kingcounty.gov/arcgis/rest/services/Property/KingCo_PropertyInfo</code></td><td>Stage 2</td><td>Find a parcel by address or ID (King)</td><td>ArcGIS REST query, no key</td></tr>
+<tr><td>Maricopa County Treasurer, <code>treasurer.maricopa.gov/PropertyTaxInformation</code></td><td>Stage 3</td><td>The tax statement page; the agency is read from it and it is saved as the bill</td><td>Headless browser</td></tr>
+<tr><td>King County Treasury, <code>payment.kingcounty.gov</code></td><td>Stage 3</td><td>Same (King)</td><td>Headless browser</td></tr>
+<tr><td>Any county website found by Claude (assessor, GIS, treasurer, tax-bill links)</td><td>Stages 2 and 3, other counties</td><td>Parcel number, collecting agency, bill link</td><td>Claude web search and web fetch, through Azure AI Foundry</td></tr>
+</table></div>
+<p>The Census, TIGERweb and county map services are free. Only the Claude calls cost money (see the Feature Specification, section 4a).</p>
+
+<h2 id="result">8. What comes back</h2>
+<ul>
+<li><strong>Status</strong>: <code>success</code> (parcel in county records and agency read from the statement), <code>found_unverified</code> (found by web research), <code>parcel_not_found</code>, <code>parcel_ambiguous</code>, <code>county_needed</code>, <code>invalid_address</code>, <code>agency_not_found</code>, <code>exception_multi_agency</code> and others.</li>
+<li><strong>Three sections</strong> mirroring the stages: the address check, the parcel (ID, address, source, verified or not, suggestions), and the agency (name, payment address, portal, validated, taxing bodies, separate collectors).</li>
+<li><strong>Confidence score (0-100)</strong> and the evidence behind it.</li>
+<li><strong>Cost</strong> of the search by stage: Claude calls, tokens, web searches and dollars.</li>
+<li><strong>Tax bill PDF</strong> when one was captured.</li>
+</ul>
+
+<h2 id="limits">9. Limits to know about</h2>
+<ul>
+<li>Only <strong>two counties</strong> (Maricopa AZ, King WA) have the verified route. Every other county depends on web research, whose answers are not verified and vary between runs. Adding a county means writing one adapter file.</li>
+<li>Some portals block automated browsers (county-taxes.com sites, for example San Francisco CA and Orange FL, use a challenge page). These are deliberately not bypassed, so those counties rely on web research.</li>
+<li>Web research can be slow and costly when it cannot find an answer: one uncapped failed search measured $7.53. Each web research call is now capped at 6 searches and 4 page fetches (<code>MAX_SEARCHES</code>, <code>MAX_FETCHES</code> in <code>portal.py</code>); the Orlando example then took 52 seconds and $0.60.</li>
+<li>Census can reject valid rural or new addresses; those return <code>county_needed</code> unless a state, county and parcel ID are supplied.</li>
+<li>A ZIP code does not decide the agency (it can span counties and districts), so it is used only to narrow the street search.</li>
+</ul>
+
+</main>
+</body>
+</html>

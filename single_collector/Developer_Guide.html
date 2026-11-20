@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>single_collector: Developer Guide</title>
+<style>
+  :root{--bg:#ffffff;--text:#1d2433;--muted:#5b6577;--line:#dde2ea;--panel:#f5f7fa;--accent:#1f5fbf;--good:#1b7a46;--warn:#a65b00;--bad:#b3261e;--code:#eef1f6}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#12161d;--text:#e6e9ef;--muted:#9aa4b5;--line:#2b3342;--panel:#1a2029;--accent:#7aa7f0;--good:#5cc98a;--warn:#e6a756;--bad:#ef8a83;--code:#222a36}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+  main{max-width:1040px;margin:0 auto;padding:32px 16px 90px}
+  h1{font-size:1.9rem;line-height:1.25;margin:0 0 6px}
+  h2{font-size:1.4rem;margin:48px 0 10px;padding-top:18px;border-top:1px solid var(--line)}
+  h3{font-size:1.08rem;margin:26px 0 6px}
+  p,li{max-width:80ch}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin:14px 0}
+  .box>:first-child{margin-top:0}.box>:last-child{margin-bottom:0}
+  .key{border-left:4px solid var(--accent)}.caution{border-left:4px solid var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:.88rem}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+  th{background:var(--panel)}
+  .tablewrap{overflow-x:auto}
+  code{background:var(--code);border-radius:4px;padding:1px 5px;font-size:.85em}
+  pre{background:var(--code);border-radius:8px;padding:12px 14px;overflow-x:auto;font-size:.8rem;line-height:1.45}
+  pre code{background:none;padding:0}
+  .ok{color:var(--good);font-weight:600}.warn{color:var(--warn);font-weight:600}.bad{color:var(--bad);font-weight:600}
+  .tag{display:inline-block;font-size:.72rem;border:1px solid var(--line);border-radius:10px;padding:0 7px;margin-left:6px;color:var(--muted)}
+  nav ol{columns:2;column-gap:32px;padding-left:20px;margin:6px 0 0}nav a{color:var(--accent)}
+  @media (max-width:640px){nav ol{columns:1}h1{font-size:1.5rem}}
+</style>
+</head>
+<body>
+<main>
+
+<h1>single_collector: Developer Guide</h1>
+<p class="sub">A walk through the code for engineers who will extend it: the search pipeline (<code>single_collector/</code>), its web UI
+(<code>django_ui/</code>) and the three outside files they depend on. Written 2026-11-17 for the three-stage design.
+Functions are named rather than numbered by line, so this stays accurate as the files change.
+For what each feature does and how it was tested see <code>Feature_Specification.html</code>; for the data flow with worked examples see <code>Search_Flow.html</code>.</p>
+
+<nav class="box">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#quick">Where do I change X?</a></li>
+    <li><a href="#map">Repository map and dependencies</a></li>
+    <li><a href="#flow">Runtime flow of one search</a></li>
+    <li><a href="#contracts">Data contracts</a></li>
+    <li><a href="#modules">Module reference: pipeline</a></li>
+    <li><a href="#django">Module reference: Django UI</a></li>
+    <li><a href="#external">External services</a></li>
+    <li><a href="#config">Configuration, constants, environment</a></li>
+    <li><a href="#errors">Error handling and the status model</a></li>
+    <li><a href="#decisions">Design decisions and the incidents behind them</a></li>
+    <li><a href="#debt">Known issues and tech debt</a></li>
+    <li><a href="#recipes">Extension recipes</a></li>
+    <li><a href="#testing">Testing and debugging</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+
+<h2 id="quick">1. Where do I change X?</h2>
+<div class="tablewrap"><table>
+  <tr><th>I want to...</th><th>Change</th></tr>
+  <tr><td>Support a new county with verified parcel search and statements</td><td>New adapter module in <code>portals/</code> plus one entry in <code>PORTALS</code>. See <a href="#recipes">recipe A</a></td></tr>
+  <tr><td>Fix an adapter after a county site changed</td><td><code>open_statement</code> (page steps) or <code>rows_on_street</code> / <code>search_by_parcel</code> (GIS query) in that county's module</td></tr>
+  <tr><td>Change how a street address is matched to parcels, or how many nearby parcels are suggested</td><td><code>stages.py</code>: <code>SIMILAR</code>, <code>NEAREST</code>, <code>same_street</code>, <code>core_word</code>, <code>parcel_by_address</code></td></tr>
+  <tr><td>Change what must be true for <code>success</code></td><td>The status chain at the end of <code>run.process</code></td></tr>
+  <tr><td>Change what Claude is asked when no adapter exists</td><td><code>portal.research_property</code> (prompt) and <code>RESEARCH_KEYS</code></td></tr>
+  <tr><td>Change how the agency is read from a statement page</td><td><code>portal.read_statement</code> (prompt) and <code>stages.agency_from_statement</code> (checks)</td></tr>
+  <tr><td>Add or rename a field in the result record</td><td>The return dict in <code>run.process</code>, and the templates <code>_result.html</code>, <code>_parcel.html</code>, <code>_agency.html</code> in the Django app</td></tr>
+  <tr><td>Add a status</td><td><code>run.process</code> (and <code>PARCEL_PROBLEMS</code>), <code>STATUS_HELP</code> in <code>search_extras.py</code>, the docs' status tables</td></tr>
+  <tr><td>Change when the batch geocoder is used</td><td><code>BATCH_MIN</code> in <code>run.py</code></td></tr>
+  <tr><td>Change where bill PDFs are saved or named</td><td><code>bill.save_pdf_bytes</code> and <code>DOWNLOADS_DIR</code> in Django settings</td></tr>
+  <tr><td>Reclassify a state (ranking only)</td><td><code>jurisdictions_config.json</code>; the search does not read it</td></tr>
+  <tr><td>Add a page to the web UI</td><td>View in <code>views.py</code>, route in <code>urls.py</code>, template in <code>templates/search/</code>, link in <code>base.html</code></td></tr>
+</table></div>
+
+<h2 id="map">2. Repository map and dependencies</h2>
+<pre><code>single_agent/                          # project folder; every command is run from here
+  geocode.py            SHARED: Census one-line geocoder                         -> used by stages.py
+  agent.py              SHARED: Claude client + ask()                            -> used by portal.py
+  agencies.py           SHARED: Excel loader (the other solution)                -> used by rank_states.py only
+  .env                  Azure AI Foundry credentials (never committed)
+  Parcels_With_Mulitple_Agencies.xlsx                                            (ranking context only)
+  output/               manifest.json, tier1_states.json/.csv                    (created at run time)
+  downloads/            {state}/{county}/{parcel}_{year}_bill.pdf, portal_tests/
+  single_collector/
+    stages.py           the three stages: validate_address, find_validate_parcel, find_validate_agency
+    run.py              process(): runs the stages and builds the result record; CLI; manifest
+    census.py           batch geocoder, TIGERweb boundaries, county lookup by name
+    portal.py           Claude: web research (no adapter) and reading a statement page
+    bill.py             save PDFs; download or render a bill from a link
+    portals/            county adapters: __init__.py (PORTALS, capture_statement), maricopa_az.py, king_wa.py, __main__.py
+    jurisdictions.py, jurisdictions_config.json, rank_states.py     state ranking only
+    app.py              legacy Streamlit UI (superseded by django_ui/)
+    Search_Flow.html, Feature_Specification.html, Developer_Guide.html, README.md, test_run*.json
+  django_ui/
+    manage.py, db.sqlite3
+    config/             settings.py, urls.py, wsgi.py
+    search/             models.py, forms.py, jobs.py, views.py, urls.py, templatetags/search_extras.py,
+                        templates/search/ (base, index, job, history, quick, batch, rank, jurisdictions + _check, _parcel, _agency, _result, _search_form)</code></pre>
+
+<h3>Import graph</h3>
+<pre><code>run.py ──► stages.py ──► geocode.py (Census)         census.py (batch, TIGERweb, county lookup)
+       │               ├─► portal.py ──► ../agent.py (Claude; needs .env at import time)
+       │               ├─► bill.py
+       │               └─► portals/__init__.py ──► maricopa_az.py, king_wa.py   (Playwright imported at module load)
+       └─► census.py (batch geocoding)
+
+rank_states.py ──► jurisdictions.py, portals (PORTALS only), ../agencies.py (pandas + Excel)
+
+django_ui/search/views.py ──► stages, census, rank_states, jurisdictions, portals.PORTALS     (in-process, no browser)
+django_ui/search/jobs.py  ──► subprocess: python -m single_collector.run --file ... --manifest ...</code></pre>
+<div class="box caution">
+  <p><strong>Things to know about the dependencies.</strong></p>
+  <ul>
+    <li><code>portal.py</code> adds the project folder to <code>sys.path</code> and imports <code>agent</code>, which creates the Azure client and reads three environment variables <em>at import time</em>. Importing <code>stages</code> (and so <code>run</code> and the Django views) fails without a valid <code>.env</code>, even for a search that never calls Claude.</li>
+    <li>The Django settings change the working directory to the project folder, because the pipeline reads <code>.env</code>, the Excel file and <code>downloads/</code> by relative path.</li>
+    <li><code>jurisdictions</code> and <code>rank_states</code> are only for the ranking. The search path (<code>run</code>, <code>stages</code>) does not import them.</li>
+  </ul>
+</div>
+
+<h2 id="flow">3. Runtime flow of one search</h2>
+<p>Entry point: <code>run.process(query, geocoded=NOT_GEOCODED)</code>. <code>query</code> is a dict with any of <code>address</code>, <code>parcel_id</code>, <code>state</code>, <code>county</code> (empty strings are treated as missing).</p>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Step</th><th>Code</th><th>Outcome / branch</th></tr>
+  <tr><td>0</td><td>Normalise the query; find the search mode</td><td><code>process</code></td><td>No address and no parcel id → <code>status: error</code>. Otherwise <code>mode</code> is <code>address</code>, <code>parcel_id</code> or <code>both</code></td></tr>
+  <tr><td>0b</td><td>Batch geocoding (CLI only)</td><td><code>run.py</code> main → <code>census.geocode_batch</code></td><td>With 10 or more addresses all are geocoded in one request; each search then receives its result as <code>geocoded</code></td></tr>
+  <tr><td>1</td><td><strong>Stage 1</strong> validate the address</td><td><code>stages.validate_address</code></td><td>No address → <code>valid: None</code>. No Census match → <code>valid: False</code>. Otherwise normalized address, county code, boundaries, flags</td></tr>
+  <tr><td>2</td><td><strong>Stage 2</strong> find / validate the parcel</td><td><code>stages.find_validate_parcel</code></td><td>County known? adapter? by id / by address / web research → <code>matched</code>, <code>ambiguous</code>, <code>not_found</code>, <code>county_needed</code>, <code>county_unknown</code>, <code>not_searched</code></td></tr>
+  <tr><td>2b</td><td>Validate the parcel's own address</td><td><code>process</code></td><td>Parcel-only search that matched: run stage 1 on <code>parcel["full_address"]</code></td></tr>
+  <tr><td>3</td><td><strong>Stage 3</strong> find / validate the agency</td><td><code>stages.find_validate_agency</code></td><td>Matched + adapter → statement page. Matched, no adapter → web research. Not matched → county-level research. Returns <code>(agency, tax_bill)</code></td></tr>
+  <tr><td>4</td><td>Choose the status</td><td><code>process</code></td><td>See <a href="#errors">section 9</a></td></tr>
+  <tr><td>5</td><td>Assemble the record</td><td><code>process</code></td><td><code>status, reason, query, address_validation, parcel, agency, tax_bill, flags</code></td></tr>
+</table></div>
+
+<h3>Stage 2 in detail (<code>find_validate_parcel</code>)</h3>
+<pre><code>address valid?        ──yes──► county = Census county of the address
+   │ no
+parcel id + state + county? ──yes──► county = census.resolve_county(state, county)   (None -> county_unknown)
+   │ no
+parcel id only          -> county_needed            no parcel id, bad address -> not_searched
+
+adapter = PORTALS.get(county_code)
+  none            -> parcel_by_web_search()   Claude finds parcel + address + agency in one answer (verified=False)
+  parcel id given -> parcel_by_id()           adapter.search_by_parcel; compare its address with the input if both given
+  address only    -> parcel_by_address()      adapter.rows_on_street(core_word, zip) -> keep same street -> exact? one / several / none (nearest 5)</code></pre>
+
+<h3>Stage 3 in detail (<code>find_validate_agency</code>)</h3>
+<pre><code>parcel status in (county_needed, county_unknown, not_searched)      -> agency not_searched, no bill
+parcel matched and adapter:
+    agency_from_statement():  capture_statement (browser) -> portal.read_statement (Claude reads page text)
+                              validated = parcel number found in the page text; portal host from the page URL; PDF saved
+    on any exception          -> fall through to web research, with a flag
+parcel matched, no adapter    -> web research from stage 2 (validated only if the source was "portal"); bill via bill.download_bill
+parcel not matched            -> county-level web research (validated False, basis county_level_search), no bill</code></pre>
+
+<h2 id="contracts">4. Data contracts</h2>
+<p>The package passes plain dicts. These are the shapes each function expects and returns; a mismatch shows up as a <code>KeyError</code>.</p>
+
+<h3>Query</h3>
+<pre><code>{"address": "400 Broad St, Seattle, WA 98109" | None,     # "street, city, ST zip"
+ "parcel_id": "1985200495" | None,
+ "state": "WA" | None, "county": "King" | None}           # state and county are needed for a parcel-only search</code></pre>
+
+<h3><code>address_check</code> (stage 1)</h3>
+<pre><code>{"checked": True, "valid": True,
+ "normalized_address": "400 BROAD ST, SEATTLE, WA, 98109", "street": "400 BROAD ST", "city_name": "SEATTLE",
+ "state": "WA", "zip": "98109", "county": "King County", "county_code": "53033",
+ "coordinates": {"x": ..., "y": ...}, "city": ["Seattle city"], "school_districts": ["Seattle Public Schools"],
+ "flags": [], "note": "..."}
+{"checked": True, "valid": False, "flags": [], "reason": "The Census geocoder found no match for this address."}
+{"checked": False, "valid": None, "flags": [], "reason": "Searching by parcel id: ..."}</code></pre>
+<p>The batch geocoder returns only <code>matched_address</code>, <code>x</code>, <code>y</code> and <code>county_code</code>. <code>validate_address</code> needs nothing else from the geocoder: county name, city and school districts come from TIGERweb and the state from the normalized address.</p>
+
+<h3>Parcel row (returned by adapters)</h3>
+<pre><code>{"parcel_id": "1985200495", "parcel_address": "400 BROAD ST", "city": "SEATTLE", "zip": "98109"}</code></pre>
+
+<h3><code>parcel</code> (stage 2)</h3>
+<pre><code>{"status": "matched" | "ambiguous" | "not_found" | "county_needed" | "county_unknown" | "not_searched",
+ "county_code", "county", "state",                     # present once the county is known
+ "parcel_id", "parcel_address", "full_address",        # matched only; full_address = "street, city, ST zip"
+ "verified": bool,                                     # True only when found in the county's own records
+ "source": "county_gis" | "claude_search",
+ "address_matches_input": bool,                        # when an address was also given
+ "candidates": [parcel row, ...],                      # ambiguous and not_found
+ "reason": str | None, "flags": [str],
+ "research": {...}}                                    # web-research route only; reused by stage 3, dropped from the output</code></pre>
+
+<h3><code>agency</code> and <code>tax_bill</code> (stage 3)</h3>
+<pre><code>{"status": "found" | "not_found" | "not_searched", "validated": bool,
+ "basis": "statement_page" | "claude_search" | "county_level_search",
+ "agency_name", "payment_address", "portal_url",
+ "separate_collectors": [str], "levying_bodies": [str],
+ "collector_model": "single" | "multiple" | "unknown",   # multiple: a separate collector named; single: 2+ taxing bodies on one statement
+ "tax_year", "checks": [str], "notes": str}
+
+{"available": True, "tax_year": "2026", "file_path": "downloads\\WA\\King_County\\1985200495_2026_bill.pdf"}
+{"available": False, "reason": "..."}</code></pre>
+
+<h3>County adapter module contract (<code>portals/*.py</code>)</h3>
+<table>
+  <tr><th>Name</th><th>Meaning</th></tr>
+  <tr><td><code>COUNTY_CODE</code></td><td>State FIPS + county FIPS; the key in <code>PORTALS</code></td></tr>
+  <tr><td><code>search_by_parcel(parcel_id)</code></td><td>List of parcel rows (0 or 1). Must accept the formats people type (with or without dashes)</td></tr>
+  <tr><td><code>rows_on_street(core_word, zip_code)</code></td><td>Parcel rows whose address contains the word, in that ZIP. Plain HTTP, no browser. The shared logic in <code>stages.py</code> does the matching and ranking</td></tr>
+  <tr><td><code>open_statement(page, parcel_id)</code></td><td>Playwright <code>Page</code>; navigate until the latest statement is showing; return the tax year as a string</td></tr>
+</table>
+<p>An adapter holds <strong>no agency information</strong>. The agency, its address and the taxing bodies are read from the statement page at run time.</p>
+
+<h3>Result record (<code>run.process</code>)</h3>
+<pre><code>{"status": "...", "reason": str | None,
+ "query": {...query, "search_mode": "address" | "parcel_id" | "both"},
+ "address_validation": address_check, "parcel": parcel, "agency": agency, "tax_bill": tax_bill, "flags": [str]}</code></pre>
+
+<h3>Django model <code>SearchJob</code></h3>
+<pre><code>id (uuid), created, finished, status ("running" | "done" | "failed"),
+queries  (JSON list of query dicts),  results (JSON list of result records, one per query),  error (text)</code></pre>
+
+<h2 id="modules">5. Module reference: pipeline</h2>
+
+<h3><code>stages.py</code> <span class="tag">the three stages</span></h3>
+<table>
+  <tr><th>Function</th><th>Behavior</th></tr>
+  <tr><td><code>clean, house_number, street_name, same_street, same_house, core_word</code></td><td>Address string helpers. <code>clean</code> upper-cases and strips punctuation. <code>same_street</code> is true when two street names (number removed) are at least <code>SIMILAR</code> (0.85) alike by <code>difflib</code>, so AVE/AV match but NE RAVENNA BLVD does not match RAVENNA AVE NE. <code>core_word</code> is the longest word of the street name, used to query the county (RAVENNA).</td></tr>
+  <tr><td><code>validate_address(query, geocoded=NOT_GEOCODED)</code></td><td>Stage 1. <code>geocoded</code> lets the batch geocoder's answer be passed in; <code>None</code> means "batch found no match" and is not retried. Reads the state from the normalized address, calls TIGERweb for county, city and school districts, and adds flags when the input state or county differs from the Census or when the geocoder and TIGERweb disagree.</td></tr>
+  <tr><td><code>parcel_matched, candidate</code></td><td>Build the matched result and a suggestion entry from a parcel row.</td></tr>
+  <tr><td><code>parcel_by_id(adapter, parcel_id, address_check, county, state)</code></td><td>Looks the parcel up; not found gives a reason. When the address is valid too, compares the parcel's street with the address and sets <code>address_matches_input</code> and a flag.</td></tr>
+  <tr><td><code>parcel_by_address(adapter, address_check, county, state)</code></td><td>Fetches rows on the street, keeps the same street, then: exactly one with the house number → matched; several → <code>ambiguous</code>; none → <code>not_found</code> with the <code>NEAREST</code> (5) nearest house numbers and a reason.</td></tr>
+  <tr><td><code>parcel_by_web_search(address_check, county, state, parcel_id)</code></td><td>No adapter: <code>portal.research_property</code>. Matched but <code>verified</code> only if Claude says the parcel came from a county portal; otherwise a flag says it is third-party.</td></tr>
+  <tr><td><code>find_validate_parcel(query, address_check)</code></td><td>Stage 2. Chooses the county (from the address, or <code>census.resolve_county</code> for a parcel-only search), then the route above.</td></tr>
+  <tr><td><code>agency_record(...)</code></td><td>Builds the <code>agency</code> dict and derives <code>collector_model</code>.</td></tr>
+  <tr><td><code>agency_from_statement(adapter, parcel)</code></td><td><code>capture_statement</code> → <code>portal.read_statement</code> → checks the parcel number is in the page text (digits only) → portal host from the page URL → saves the PDF. Returns <code>(agency, tax_bill)</code>.</td></tr>
+  <tr><td><code>find_validate_agency(query, address_check, parcel)</code></td><td>Stage 3. See the diagram in <a href="#flow">section 3</a>. Mutates <code>parcel["flags"]</code> when the adapter fails.</td></tr>
+</table>
+
+<h3><code>run.py</code></h3>
+<table>
+  <tr><th>Item</th><th>Behavior</th></tr>
+  <tr><td><code>process(query, geocoded)</code></td><td>Runs the three stages (with the extra stage 1 for a parcel-only match), chooses the status, assembles the record. See sections 3 and 9.</td></tr>
+  <tr><td><code>PARCEL_PROBLEMS</code></td><td>Maps a stage 2 status to the result status (<code>not_found</code> → <code>parcel_not_found</code>, <code>not_searched</code> → <code>invalid_address</code>, and so on).</td></tr>
+  <tr><td><code>read_queries(args)</code></td><td>From <code>--file</code> (CSV, <code>utf-8-sig</code>), from positional addresses (with optional <code>--parcel --state --county</code>), or from <code>--parcel</code> alone.</td></tr>
+  <tr><td>main block</td><td>argparse; batch geocoding at <code>BATCH_MIN</code> (10); loop with per-search error isolation; writes the manifest to <code>--manifest</code> (default <code>output/manifest.json</code>) and prints it.</td></tr>
+</table>
+
+<h3><code>census.py</code></h3>
+<table>
+  <tr><th>Function</th><th>Behavior</th></tr>
+  <tr><td><code>geocode_batch(addresses)</code></td><td>One <code>/addressbatch</code> request for the addresses that parse as <code>street, city, ST [zip]</code>. An address that does not parse is reported as no match (it no longer stops the run). Returns <code>{address: {matched_address, x, y, county_code} or None}</code>.</td></tr>
+  <tr><td><code>tigerweb_boundaries(x, y)</code></td><td>ArcGIS <code>identify</code> for school districts (layers 14, 16, 18), cities (26, 28) and counties (82). Raises <code>IndexError</code> if the point is in no county.</td></tr>
+  <tr><td><code>query_layer(layer_id, where, fields)</code></td><td>Small helper to query a TIGERweb layer.</td></tr>
+  <tr><td><code>resolve_county(state, county)</code></td><td>State abbreviation → state code (layer 80); county name (with or without "County"/"Parish"/"Borough") → county code (layer 82). <code>None</code> unless exactly one county matches. This replaces any fixed county table.</td></tr>
+</table>
+
+<h3><code>portal.py</code> <span class="tag">Claude's two jobs</span></h3>
+<table>
+  <tr><th>Item</th><th>Behavior</th></tr>
+  <tr><td><code>first_json_object(text, defaults)</code></td><td>Decodes the first JSON object in a reply (ignoring code fences and commentary). With no <code>{</code>, returns the defaults with the prose (first 400 characters) as <code>notes</code>. Keys Claude left out get their default, so callers never hit a <code>KeyError</code>.</td></tr>
+  <tr><td><code>research_property(address, county, state, parcel_id, boundaries)</code></td><td>Web search and web fetch. <code>address</code> and <code>parcel_id</code> may each be <code>None</code>. Asks for parcel id and its source, parcel address, agency and address, taxing bodies, separate collectors, tax year and bill link. Never to guess a parcel id.</td></tr>
+  <tr><td><code>read_statement(captured, parcel_id)</code></td><td>No tools. Gives Claude the statement page's text (first 12,000 characters), title and URL, and asks it to use only that text for the agency, its printed address, the taxing bodies, any separate collector and the parcel number shown.</td></tr>
+</table>
+
+<h3><code>bill.py</code></h3>
+<table>
+  <tr><th>Function</th><th>Behavior</th></tr>
+  <tr><td><code>save_pdf_bytes(content, state, county, parcel_id, tax_year)</code></td><td>Writes <code>downloads/{state}/{county}/{parcel}_{year}_bill.pdf</code> with unsafe characters replaced; returns the path.</td></tr>
+  <tr><td><code>render_page_to_pdf(url)</code></td><td>Headless Chromium prints an HTML page to PDF (<code>networkidle</code>, 60 s).</td></tr>
+  <tr><td><code>download_bill(bill_url, state, county, parcel_id, tax_year)</code></td><td>Used on the web-research route. Needs a link, parcel and year. A PDF response is saved as is; an HTML page is rendered. Any exception becomes <code>available: False</code> with the reason.</td></tr>
+</table>
+
+<h3><code>portals/</code> <span class="tag">county adapters</span></h3>
+<p><code>portals/__init__.py</code>: <code>PORTALS</code> maps county code → module. <code>capture_statement(adapter, parcel_id)</code> starts headless Chromium (30 s default timeout), calls <code>adapter.open_statement</code>, and returns <code>{tax_year, pdf, page_text, page_title, page_url}</code>.</p>
+<div class="tablewrap"><table>
+  <tr><th></th><th>Maricopa, AZ (04013)</th><th>King, WA (53033)</th></tr>
+  <tr><td>Parcel GIS</td><td>Assessor <code>Parcels/MapServer/0/query</code>. Fields <code>APN_DASH</code>, <code>PHYSICAL_ADDRESS</code> (padded with spaces; the street is the address minus city and ZIP), <code>PHYSICAL_CITY</code>, <code>PHYSICAL_ZIP</code></td><td><code>KingCo_PropertyInfo/MapServer/2/query</code>. Fields <code>PIN</code>, <code>ADDR_FULL</code>, <code>POSTALCTYNAME</code>, <code>ZIP5</code></td></tr>
+  <tr><td><code>search_by_parcel</code></td><td><code>APN_DASH='118-50-094' OR APN='11850094'</code></td><td><code>PIN='...'</code> from the first 10 digits (a 12-digit tax account number begins with the parcel number)</td></tr>
+  <tr><td><code>rows_on_street</code></td><td><code>UPPER(PHYSICAL_ADDRESS) LIKE '%WORD%' AND PHYSICAL_ZIP='zip'</code></td><td><code>UPPER(ADDR_FULL) LIKE '%WORD%' AND ZIP5='zip'</code></td></tr>
+  <tr><td><code>open_statement</code></td><td><code>treasurer.maricopa.gov/PropertyTaxInformation/?parcel={digits}</code> → <strong>Payment Coupon</strong> tab → <code>.k-picker</code> → first <code>.k-list-item</code> (latest year) → <code>button.create-button</code> → wait for <strong>Tax Breakdown</strong></td><td><code>payment.kingcounty.gov/Home/Index?app=PropertyTaxes</code> → <code>input[name=searchParcel]</code>, Enter → <strong>Breakdown by Tax Year</strong> → click <code>^\d{4} Tax / Fee Distribution$</code> (the year is read from its text)</td></tr>
+  <tr><td>Why not Census coordinates</td><td colspan="2">The Census point is interpolated along the street and usually lies outside the parcel polygon, so point-in-parcel returned no parcel. Both adapters match on the address text instead.</td></tr>
+  <tr><td>Selectors at risk</td><td><code>.k-picker</code>, <code>.k-list-item</code>, <code>button.create-button</code>, tab and heading texts</td><td><code>input[name=searchParcel]</code>, the heading and distribution texts</td></tr>
+</table></div>
+<p><code>portals/__main__.py</code>: <code>python -m single_collector.portals &lt;county_code&gt; --parcel ID</code> or <code>--street "..." --zip ZIP</code> runs one adapter alone and saves the PDF to <code>downloads/portal_tests/</code>.</p>
+
+<h3>Confidence and cost: <code>confidence.py</code>, <code>cost.py</code></h3>
+<p><code>confidence.score(address_check, parcel, agency)</code> returns <code>{score, level, summary, points_earned, points_possible, factors[]}</code>; the rubric and weights are in the module docstring, one small function per factor. To change a weight, edit that function. <code>agent.ask</code> appends each call's billed usage to <code>agent.USAGE</code>; <code>run.process</code> takes <code>cost.mark()</code> positions between the stages and <code>cost.between(start, end)</code> prices each slice, then <code>cost.combine</code> totals them into <code>result["cost"]</code>. Prices come from <code>.env</code> (<code>COST_INPUT_PER_MTOK</code>, <code>COST_OUTPUT_PER_MTOK</code>, <code>COST_WEB_SEARCH_EACH</code>). A web research call made in stage 2 and reused by stage 3 is charged to stage 2. Why web research is expensive is explained in the Feature Specification, section 4a.</p>
+
+<h3>Trajectory and audit: <code>trace.py</code>, <code>audit_file.py</code></h3>
+<p><code>run.process</code> calls <code>trace.start()</code>, then <code>trace.stage(name)</code> before each stage. Code that calls a public service records it with <code>trace.add(source, action, request, outcome, url)</code>; <code>portal.py</code> records each Claude call with <code>trace.claude(action, request, outcome)</code>, which reads the last entry of <code>agent.USAGE</code> (filled by <code>agent.ask</code> from the response blocks: searches, results, pages, notes). <code>trace.report()</code> becomes <code>result["audit"]</code>. To trace a new source, call <code>trace.add</code> right after the call. <code>audit_file.build(results)</code> returns the workbook bytes; Django serves it at <code>/jobs/&lt;id&gt;/audit.xlsx</code>. The confidence rules live only in <code>confidence.RULES</code>, which feeds the score, the Search tab table and the audit Method sheet.</p>
+
+<h3>Ranking: <code>jurisdictions.py</code>, <code>rank_states.py</code></h3>
+<p>Unchanged and independent of the search. <code>rank_states.rank_states()</code> gates on <code>is_single_collector</code>, then sorts by <code>(confidence != "high", counties needed for 80% of housing units, total counties)</code>. <code>jurisdictions.state_for_fips</code> and <code>tier_1_states</code> are no longer called by anything.</p>
+
+<h2 id="django">6. Module reference: Django UI</h2>
+<p>Run from the project folder: <code>python django_ui/manage.py migrate</code> once, then <code>python django_ui/manage.py runserver</code>, and open <code>http://127.0.0.1:8000/</code>.</p>
+<table>
+  <tr><th>File</th><th>Role</th></tr>
+  <tr><td><code>config/settings.py</code></td><td>Sets <code>ROOT</code> (project folder), changes the working directory to it and adds it to <code>sys.path</code>, so the views can import <code>single_collector</code>. SQLite database at <code>django_ui/db.sqlite3</code>. <code>DEBUG</code> on and only localhost allowed unless environment variables say otherwise. <code>SEARCH_TIMEOUT_SECONDS</code> (30 minutes) and <code>DOWNLOADS_DIR</code>.</td></tr>
+  <tr><td><code>search/models.py</code></td><td><code>SearchJob</code>: the queries, status, results and error of one search or batch. <code>title</code> summarises the first query.</td></tr>
+  <tr><td><code>search/jobs.py</code></td><td><code>start(queries)</code> creates the job and a daemon worker thread. <code>run(job_id)</code> writes the queries to a temp CSV and runs <code>python -m single_collector.run --file ... --manifest ...</code> in a <strong>separate process</strong>, then stores the manifest as the job's results. <code>refresh(job)</code> marks a "running" job as failed if its worker is gone (the server restarted).</td></tr>
+  <tr><td><code>search/forms.py</code></td><td><code>SearchForm</code>: mode (address, parcel ID, both) decides which fields are required; the state must be two letters. <code>query()</code> returns the pipeline's query dict with unused fields empty. <code>BatchForm</code>: lines or a CSV upload, at most 200 searches.</td></tr>
+  <tr><td><code>search/views.py</code></td><td><code>index</code> (start a search), <code>job</code> and <code>job_status</code> (page and JSON for polling), <code>use_parcel</code> (re-search by a suggested parcel), <code>history</code>, <code>quick</code> (stages 1 and 2 in-process), <code>batch</code>, <code>rank</code> (live Census, on demand), <code>jurisdictions_page</code>, <code>download</code> (serves only PDFs under <code>downloads/</code>).</td></tr>
+  <tr><td><code>search/templatetags/search_extras.py</code></td><td>Filters: <code>status_help</code>, <code>status_tone</code>, <code>pdf_url</code>, <code>pretty</code>, <code>spaced</code>. <code>STATUS_HELP</code> is the text for each status.</td></tr>
+  <tr><td><code>templates/search/</code></td><td><code>base.html</code> (layout and styles, dark mode), page templates, and shared partials: <code>_search_form.html</code> (with a little JavaScript that shows only the fields the chosen search type uses), <code>_check.html</code>, <code>_parcel.html</code> (with the suggested-parcels table and its "Search with this parcel" buttons), <code>_agency.html</code>, <code>_result.html</code>.</td></tr>
+</table>
+<h3>How a search moves through the UI</h3>
+<pre><code>POST /  (SearchForm valid)  ──► jobs.start()  ──► SearchJob(status=running) + worker thread ──► redirect /jobs/&lt;id&gt;/
+                                                      │ thread: subprocess "python -m single_collector.run" ... (minutes)
+GET /jobs/&lt;id&gt;/  shows "Searching...", JavaScript polls /jobs/&lt;id&gt;/status/ every 3 s
+                                                      │ thread finishes: job.results = manifest, status = done
+poll sees status != running ──► page reloads ──► _result.html renders the three stages, suggestions, bill link
+"Search with this parcel"  ──► POST /use-parcel/ ──► new job by parcel id, state and county ──► same cycle</code></pre>
+<p>Included templates do not inherit <code>{% load %}</code> from their parent: <code>_parcel.html</code> and <code>_agency.html</code> each load <code>search_extras</code> themselves.</p>
+
+<h2 id="external">7. External services</h2>
+<div class="tablewrap"><table>
+  <tr><th>Service</th><th>Used by</th><th>Auth</th><th>Notes</th></tr>
+  <tr><td>Census geocoder <code>.../geographies/onelineaddress</code></td><td><code>geocode.py</code></td><td>none</td><td><code>benchmark=Public_AR_Current</code>, <code>vintage=Current_Current</code>, <code>layers=all</code>. Interpolates along the street, so an accepted address can have no parcel.</td></tr>
+  <tr><td>Census batch geocoder <code>.../addressbatch</code></td><td><code>census.geocode_batch</code></td><td>none</td><td>CSV upload, up to 10,000 rows; the response has no header.</td></tr>
+  <tr><td>TIGERweb <code>tigerWMS_Current/MapServer</code> (<code>identify</code> and <code>query</code>)</td><td><code>census.tigerweb_boundaries</code>, <code>resolve_county</code></td><td>none</td><td>Layer ids 14, 16, 18, 26, 28, 82 and 80 are hard-coded.</td></tr>
+  <tr><td>TIGERweb <code>State_County/MapServer/67</code></td><td><code>rank_states</code></td><td>none</td><td>Housing units per county. The Census Data API now needs a key, so it is not used.</td></tr>
+  <tr><td>Maricopa Assessor ArcGIS, King County ArcGIS</td><td>adapters</td><td>none</td><td>Public query endpoints.</td></tr>
+  <tr><td><code>treasurer.maricopa.gov</code>, <code>payment.kingcounty.gov</code></td><td>adapters</td><td>none</td><td>Driven with Chromium; no bot challenge today.</td></tr>
+  <tr><td><code>county-taxes.com / .net</code> (San Francisco, Orange FL)</td><td>not adapted</td><td>n/a</td><td>Cloudflare challenge. The project does not bypass it, so these counties fall on the web-research route.</td></tr>
+  <tr><td>Azure AI Foundry (Claude with web search and web fetch)</td><td><code>agent.ask</code></td><td><code>.env</code></td><td>Tool types <code>web_search_20260209</code> and <code>web_fetch_20260209</code>.</td></tr>
+</table></div>
+
+<h2 id="config">8. Configuration, constants, environment</h2>
+<div class="tablewrap"><table>
+  <tr><th>Name</th><th>Where</th><th>Value / meaning</th></tr>
+  <tr><td><code>AZURE_ANTHROPIC_API_KEY</code>, <code>_API_ENDPOINT</code>, <code>_DEPLOYMENT_NAME</code></td><td><code>.env</code> → <code>agent.py</code></td><td>Missing → <code>KeyError</code> on import. On Azure the model name is the deployment name.</td></tr>
+  <tr><td><code>SIMILAR</code>, <code>NEAREST</code></td><td><code>stages.py</code></td><td>0.85 street-name similarity; 5 suggested parcels.</td></tr>
+  <tr><td><code>BATCH_MIN</code></td><td><code>run.py</code></td><td>10.</td></tr>
+  <tr><td><code>WEB_TOOLS</code>, <code>RESEARCH_KEYS</code>, <code>STATEMENT_KEYS</code></td><td><code>portal.py</code></td><td>Tools offered to Claude; the keys (and defaults) each Claude answer must contain.</td></tr>
+  <tr><td><code>DOWNLOADS</code></td><td><code>bill.py</code></td><td><code>Path("downloads")</code>, relative to the working directory.</td></tr>
+  <tr><td><code>SEARCH_TIMEOUT_SECONDS</code>, <code>DOWNLOADS_DIR</code>, <code>SECRET_KEY</code>, <code>DEBUG</code>, <code>ALLOWED_HOSTS</code></td><td>Django settings</td><td><code>DJANGO_SECRET_KEY</code>, <code>DJANGO_DEBUG</code> (1 or 0) and <code>DJANGO_ALLOWED_HOSTS</code> can override. The default secret key is for local use only.</td></tr>
+  <tr><td>Timeouts</td><td>various</td><td>HTTP 60 s (batch geocoder 600 s, county list 120 s); Playwright default 30 s; render fallback 60 s; Maricopa result wait 20 s.</td></tr>
+  <tr><td>Python packages</td><td></td><td><code>anthropic</code>, <code>python-dotenv</code>, <code>requests</code>, <code>pandas</code>, <code>openpyxl</code>, <code>playwright</code> (and <code>playwright install chromium</code>), <code>django</code>. <code>streamlit</code> only for the legacy UI.</td></tr>
+</table></div>
+<p>Run every command from the project folder.</p>
+
+<h2 id="errors">9. Error handling and the status model</h2>
+<p>There are few <code>try/except</code> blocks, only where a failure must not stop the work:</p>
+<table>
+  <tr><th>Where</th><th>Catches</th><th>Result</th></tr>
+  <tr><td><code>stages.find_validate_agency</code></td><td>Any exception in an adapter's statement capture</td><td>Flag "County portal script failed"; falls back to web research</td></tr>
+  <tr><td><code>bill.download_bill</code></td><td>Any exception fetching or rendering a bill link</td><td><code>tax_bill = {available: false, reason}</code></td></tr>
+  <tr><td>CLI loop in <code>run.py</code></td><td>Any exception for one search</td><td>A record with status <code>error</code>; the rest continue</td></tr>
+  <tr><td><code>jobs.run</code> (Django)</td><td>Any exception in a worker thread</td><td>The job becomes <code>failed</code> with the error; a thread must always leave the job in a final state</td></tr>
+  <tr><td><code>views.quick</code>, <code>views.rank</code></td><td>Network or service problems</td><td>An error message on the page instead of a server error</td></tr>
+</table>
+<p>Expected outcomes that are <em>not</em> exceptions: no Census match, no parcel, several parcels, no agency. They are statuses with a <code>reason</code>.</p>
+
+<h3>How the final status is chosen (<code>run.process</code>)</h3>
+<pre><code>no address and no parcel id                                  -> error
+address invalid and no parcel id                             -> invalid_address
+parcel status is not "matched"                               -> parcel_not_found | parcel_ambiguous | county_needed | county_unknown | invalid_address
+agency status is not "found"                                 -> agency_not_found
+agency has separate collectors                               -> exception_multi_agency
+parcel verified AND agency validated                         -> success
+otherwise (found by web research, not confirmed)             -> found_unverified
+(any exception in process, caught by the CLI loop)          -> error</code></pre>
+<div class="box caution"><p><strong><code>success</code> means verified.</strong> The parcel is in the county's own records and the agency was read from the county's statement, with the parcel number confirmed on it. Web-research results are <code>found_unverified</code> even when they look right. A <code>success</code> result can still have no bill if the PDF could not be saved, so check <code>tax_bill.available</code> separately.</p></div>
+
+<h2 id="decisions">10. Design decisions and the incidents behind them</h2>
+<table>
+  <tr><th>Decision</th><th>Why (what happened)</th></tr>
+  <tr><td>Three named stages, each validating and explaining</td><td>A search for 4800 Ravenna Ave NE returned the county but a blank parcel. The Census accepted the address by interpolation; King County has no such parcel. The old code gave no reason and never showed the parcel's address.</td></tr>
+  <tr><td>Suggest nearby parcels; never pick one</td><td>A bill for the wrong property is worse than none. The user chooses, or enters a parcel ID.</td></tr>
+  <tr><td>Parcel found by address text in the county GIS, not by coordinates</td><td>Census points are interpolated and usually fall outside the parcel polygon.</td></tr>
+  <tr><td>No fixed lists: county from the Census, agency from the statement</td><td>The request was a dynamic search. The earlier design skipped "fragmented" states with a config file and typed each county's agency into its script. Now the county code comes from the Census, the agency name, address and taxing bodies from the live statement page, and an unknown county is researched on the web.</td></tr>
+  <tr><td>Adapters remain, but hold no agency data</td><td>Deterministic parcel search and statement access need each county's GIS service and page steps. Everything else is read at run time. Claude cannot fill portal forms, so web research alone gave third-party parcel ids and no bills.</td></tr>
+  <tr><td><code>validated</code> requires the parcel number on the statement page</td><td>Gives a concrete, checkable link between the parcel and the agency answer.</td></tr>
+  <tr><td><code>found_unverified</code> status</td><td>A New Jersey test reported <code>success</code> for a parcel from a third-party source with an unvalidated agency. A plain success should mean verified.</td></tr>
+  <tr><td>Claude's answers always carry every key (<code>first_json_object</code>)</td><td>Replies were wrapped in code fences, followed by commentary, or plain prose. A strict parse crashed a whole run once. Missing keys now default instead of raising <code>KeyError</code>.</td></tr>
+  <tr><td>Per-search error isolation and <code>NOT_GEOCODED</code></td><td>One crash lost every earlier result; a malformed address stopped a batch of 10 or more; addresses the batch geocoder could not match were geocoded again one by one.</td></tr>
+  <tr><td>Do not bypass Cloudflare</td><td>San Francisco and Orange County FL sit behind a bot challenge. They are a reported limit, not something to defeat.</td></tr>
+  <tr><td>Django runs the pipeline in a subprocess from a worker thread</td><td>Searches take minutes and drive a headless browser, which does not belong inside a web request or the server's event loop (the Streamlit version hit the same Windows problem). A job table plus polling keeps the page responsive and keeps history.</td></tr>
+  <tr><td>The CLI takes <code>--manifest</code></td><td>Concurrent jobs must not overwrite the shared <code>output/manifest.json</code>; each job gets its own file.</td></tr>
+  <tr><td>Ranking uses visible signals, not a weighted score</td><td>Any weights would be arbitrary and would hide why a state ranks where it does.</td></tr>
+</table>
+
+<h2 id="debt">11. Known issues and tech debt</h2>
+<p>Ordered roughly by how likely they are to matter when you extend the code. Items fixed in the redesign (the blank-parcel case, the four-part address unpack, the batch crash on a malformed address, the typed-in agency text, the unchecked supplied parcel id) are not listed.</p>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Issue</th><th>Where</th><th>Suggested fix</th></tr>
+  <tr><td>1</td><td>No automated tests for the pipeline or the Django app. Verification was manual runs, saved outputs and a scripted pass over every Django page.</td><td>everything</td><td>Start with the pure functions in <a href="#testing">section 13</a>; keep the scratch Django test as a test module</td></tr>
+  <tr><td>2</td><td>Importing <code>stages</code>, <code>run</code> or the Django views needs a working <code>.env</code> because the Claude client is created at import. A search that never calls Claude still needs it.</td><td><code>agent.py</code>, <code>portal.py</code></td><td>Create the client lazily on the first <code>ask()</code>; make the project a package to drop the <code>sys.path</code> edit</td></tr>
+  <tr><td>3</td><td>Fixed <code>wait_for_timeout</code> sleeps in both adapters make them slow and flaky.</td><td><code>maricopa_az.open_statement</code>, <code>king_wa.open_statement</code></td><td>Wait for the element the next step needs</td></tr>
+  <tr><td>4</td><td>Parcel-only search by web research can return a parcel address without city or state, so the follow-up address validation may fail.</td><td><code>parcel_by_web_search</code>, <code>run.process</code></td><td>Append the county and state to <code>full_address</code> when they are missing</td></tr>
+  <tr><td>5</td><td>Street matching is heuristic: the longest word of the street name queries the county, and names at least 85% alike match. Ranges, corner lots and unusual forms may need manual parcel entry.</td><td><code>stages.core_word</code>, <code>same_street</code></td><td>Tune with real county data; consider the parcel layers' separate street-name fields where they exist</td></tr>
+  <tr><td>6</td><td>The agency is read by Claude from page text. A page that does not itemise taxing bodies (Maricopa) gives <code>collector_model: unknown</code>; wording is the portal's own ("Treasury Operations").</td><td><code>portal.read_statement</code></td><td>Acceptable; do not infer a model the page does not show</td></tr>
+  <tr><td>7</td><td>Web-research results vary from run to run (parcel formatting, office address), and a county-level agency is shown when no parcel matched.</td><td><code>portal.research_property</code></td><td>Keep them labelled unverified; consider asking twice and comparing</td></tr>
+  <tr><td>8</td><td>Strictly sequential; one Chromium launch per search; no rate limiting or delay for county sites. Each Django job runs one subprocess.</td><td><code>run.py</code>, <code>portals/__init__.py</code></td><td>Reuse one browser per run; add a per-host delay before parallelising</td></tr>
+  <tr><td>9</td><td>Django: worker threads die with the server (a restart marks running jobs failed); <code>runserver</code>, DEBUG on and no login. It is built for one user on localhost.</td><td><code>jobs.py</code>, <code>settings.py</code></td><td>For shared use: a task queue, a real WSGI server, authentication, a real secret key, <code>DEBUG=0</code></td></tr>
+  <tr><td>10</td><td>Playwright is imported when <code>portals</code> loads, so the Django server and <code>rank_states</code> pay for it.</td><td><code>portals/__init__.py</code></td><td>Import inside <code>capture_statement</code></td></tr>
+  <tr><td>11</td><td>Relative paths (<code>downloads/</code>, <code>.env</code>, the Excel file) depend on the working directory.</td><td><code>bill.py</code>, <code>agent.py</code>, <code>agencies.py</code></td><td>Resolve against the project folder</td></tr>
+  <tr><td>12</td><td>The bill fallback waits for <code>networkidle</code>, which never arrives on pages that poll.</td><td><code>bill.render_page_to_pdf</code></td><td>Wait for a specific element</td></tr>
+  <tr><td>13</td><td>TIGERweb layer ids (14, 16, 18, 26, 28, 80, 82, 67) are hard-coded.</td><td><code>census.py</code>, <code>rank_states.py</code></td><td>Look layers up by name, or add a startup check</td></tr>
+  <tr><td>14</td><td>Dead code: <code>jurisdictions.state_for_fips</code> and <code>tier_1_states</code>; <code>jurisdictions.load</code> re-reads the file on every call; the Streamlit <code>app.py</code> duplicates the Django UI.</td><td><code>jurisdictions.py</code>, <code>app.py</code></td><td>Delete or cache; remove the Streamlit UI once Django is accepted</td></tr>
+  <tr><td>15</td><td>GIS <code>where</code> clauses are built from strings. The search word and ZIP are reduced to letters, digits and spaces first, and quotes are doubled in the parcel id.</td><td>adapters</td><td>Fine for now; keep the sanitising if you add adapters</td></tr>
+</table></div>
+
+<h2 id="recipes">12. Extension recipes</h2>
+
+<h3>A. Add a county adapter</h3>
+<ol>
+  <li>Open the county's tax portal by hand. Check it loads without a CAPTCHA or "verifying you are human" page. If it does not, the county stays on the web-research route.</li>
+  <li>Find how to turn an address and a parcel id into parcel rows without the browser: usually a public ArcGIS <code>.../MapServer/N/query</code> on the assessor's site. Check the address field's format (case, padding, abbreviations) and which field holds the parcel id.</li>
+  <li>Walk from a parcel id to the statement by hand and note the selectors and the final element that proves the statement is showing.</li>
+  <li>Create <code>portals/&lt;county&gt;_&lt;st&gt;.py</code>. Do not put any agency name or address in it:</li>
+</ol>
+<pre><code>import re
+import requests
+
+COUNTY_CODE = "32003"                       # state FIPS + county FIPS (Clark County, NV)
+PARCELS = "https://.../MapServer/0/query"
+
+
+def parcel_rows(where):
+    """Return rows shaped {"parcel_id", "parcel_address", "city", "zip"}."""
+    ...
+
+
+def search_by_parcel(parcel_id):
+    return parcel_rows(f"APN='{re.sub(r'[^0-9A-Za-z-]', '', parcel_id)}'")
+
+
+def rows_on_street(core_word, zip_code):
+    word = re.sub(r"[^A-Z0-9]", "", core_word.upper())
+    return parcel_rows(f"UPPER(ADDRESS) LIKE '%{word}%' AND ZIP='{re.sub(r'[^0-9]', '', zip_code)}'")
+
+
+def open_statement(page, parcel_id):
+    page.goto(f"https://.../{parcel_id}", wait_until="domcontentloaded")
+    page.get_by_text("Tax Statement").wait_for(timeout=20000)   # a real wait, not a sleep
+    return "2026"                                                # the tax year shown</code></pre>
+<ol start="5">
+  <li>Register it in <code>portals/__init__.py</code> (import it and add it to the tuple that builds <code>PORTALS</code>).</li>
+  <li>Test alone: <code>python -m single_collector.portals 32003 --parcel &lt;id&gt;</code>, and the street search with <code>--street "..." --zip ...</code>. Open the PDF and compare amounts and parcel with the portal.</li>
+  <li>Test through the pipeline by address, by parcel id, with a nonexistent number (expect suggestions), and with a multi-parcel address (expect <code>parcel_ambiguous</code>). Check the agency read from the page makes sense and <code>validated</code> is true.</li>
+</ol>
+
+<h3>B. Add a status or a field to the record</h3>
+<ol>
+  <li>Return it from <code>run.process</code> (and, for a new parcel problem, add it to <code>PARCEL_PROBLEMS</code>).</li>
+  <li>Add the text to <code>STATUS_HELP</code> and, if useful, show the field in the partial templates.</li>
+  <li>Update the status table in the docs.</li>
+</ol>
+
+<h3>C. Add a page to the Django UI</h3>
+<ol>
+  <li>Write the view in <code>views.py</code>. For anything that takes more than a couple of seconds or drives a browser, create a job with <code>jobs.start(queries)</code> instead of working in the request.</li>
+  <li>Add the route in <code>urls.py</code> and a template that extends <code>search/base.html</code>; add a link in the header there.</li>
+  <li>If the template uses the custom filters or includes a partial that does, load <code>search_extras</code> in that file.</li>
+</ol>
+
+<h3>D. Make the multi-agency check stronger</h3>
+<p>Today <code>separate_collectors</code> is what Claude reports from the page or the web. A stronger check compares the statement's itemised taxing bodies with the Census city and school district: if the property is in a city or school district that does not appear on the statement, name it. Implement it in <code>agency_from_statement</code>, where both the page text and <code>address_check</code> are available.</p>
+
+<h3>E. Handle blocked portals</h3>
+<p>Do not add stealth or CAPTCHA-solving code. Options that stay within the sites' terms: an assessor or treasurer open-data download, a data agreement with the portal vendor, or leave the county on the web-research route (which already reports <code>found_unverified</code> and no bill). An adapter can raise a dedicated exception from <code>open_statement</code> when it meets a challenge page, so the flag says "blocked by bot protection".</p>
+
+<h3>F. Process many searches faster</h3>
+<p>Geocoding is already batched. The slow steps are web research (minutes) and adapter browsing (about 30 seconds). Parallelise with a small worker pool, one Chromium per worker, one request at a time per county site. Fix issues 8 and 10 first, and move the Django jobs to a proper queue.</p>
+
+<h2 id="testing">13. Testing and debugging</h2>
+<h3>Manual commands (from the project folder)</h3>
+<pre><code>python -m single_collector.run "400 Broad St, Seattle, WA 98109"                            # by address: bill expected
+python -m single_collector.run --parcel 118-50-094 --state AZ --county Maricopa              # by parcel id
+python -m single_collector.run "330 W Holly St, Phoenix, AZ 85003" --parcel 112-21-086       # both, mismatch flagged
+python -m single_collector.run "4800 Ravenna Ave NE, Seattle, WA 98105"                      # parcel_not_found + 5 suggestions
+python -m single_collector.run "721 Pine St, Seattle, WA 98101"                              # parcel_ambiguous (3 parcels)
+python -m single_collector.run "Not A Real Address Zzz, Reno, NV 89501"                      # invalid_address
+python -m single_collector.run "238 Filmore St, Riverside, NJ 08075"                         # no adapter: found_unverified
+python -m single_collector.portals 53033 --parcel 1985200495                                 # one adapter alone
+python -m single_collector.rank_states
+python django_ui/manage.py runserver                                                         # the web UI</code></pre>
+<h3>Debugging an adapter</h3>
+<ul>
+  <li>Run <code>python -m single_collector.portals ...</code>. If the parcel is not found, call <code>search_by_parcel</code> or <code>rows_on_street</code> directly and print the rows.</li>
+  <li>To watch the browser, change <code>p.chromium.launch()</code> to <code>p.chromium.launch(headless=False, slow_mo=300)</code> in <code>portals/__init__.py</code>.</li>
+  <li>At the failing step call <code>page.screenshot(path="debug.png")</code> or print <code>page.inner_text("body")[:2000]</code>.</li>
+  <li>Always compare the saved PDF with the portal: parcel number, address and amounts must match.</li>
+</ul>
+<h3>Debugging Claude's side</h3>
+<p>Print the raw reply in <code>portal.first_json_object</code>. Failures are almost always prose instead of JSON, or an answer that contradicts the page text. For <code>read_statement</code>, print <code>captured["page_text"]</code> to see exactly what Claude was given.</p>
+<h3>Debugging a Django job</h3>
+<p>A failed job stores the pipeline's error output in <code>SearchJob.error</code> (visible on the job page). To reproduce, run the same search with <code>python -m single_collector.run</code>. The job's temp files are under the system temp folder in <code>search-*</code>.</p>
+<h3>Suggested first automated tests</h3>
+<table>
+  <tr><th>Target</th><th>Cases</th></tr>
+  <tr><td><code>stages</code> helpers</td><td><code>house_number</code> and <code>street_name</code> (units, no number, punctuation); <code>same_street</code> (AVE/AV match, NE RAVENNA BLVD vs RAVENNA AVE NE do not); <code>core_word</code> (3RD AVE, no name)</td></tr>
+  <tr><td><code>stages.parcel_by_address</code> with a fake adapter</td><td>exact, several, none with nearest, none with no street rows, house number missing</td></tr>
+  <tr><td><code>stages.find_validate_parcel</code> with fakes</td><td>county_needed, county_unknown, not_searched, id not found, both inputs disagreeing</td></tr>
+  <tr><td><code>run.process</code> with stubbed stages</td><td>every status in the chain, including <code>found_unverified</code> versus <code>success</code></td></tr>
+  <tr><td><code>portal.first_json_object</code></td><td>fenced JSON, JSON followed by text, prose only, missing keys</td></tr>
+  <tr><td><code>census.resolve_county</code></td><td>"King", "King County", "Prince George's", an unknown county, a bad state</td></tr>
+  <tr><td><code>census.geocode_batch</code></td><td>unparseable address mixed with valid ones</td></tr>
+  <tr><td>Django views (test client)</td><td>form validation per mode, <code>quick</code> for an adapter and a non-adapter county, a job start and finish with an invalid address, <code>download</code> path traversal, <code>use_parcel</code> validation</td></tr>
+  <tr><td>Adapters (live, marked slow)</td><td>the known parcels; assert the PDF text contains the parcel number</td></tr>
+</table>
+
+<h2 id="glossary">14. Glossary</h2>
+<table>
+  <tr><th>Term</th><th>Meaning</th></tr>
+  <tr><td>Parcel ID / APN / PIN</td><td>The assessor's parcel number. The format differs by county (Maricopa <code>118-50-094</code>, King <code>1985200495</code>) and is unique only within a county.</td></tr>
+  <tr><td>FIPS / county code</td><td>Federal numeric codes: 2 digits for a state, 3 for a county. A "county code" here is both joined (Maricopa = <code>04013</code>).</td></tr>
+  <tr><td>TIGERweb</td><td>The Census Bureau's boundary map service (counties, cities, school districts).</td></tr>
+  <tr><td>ArcGIS REST query</td><td>The standard HTTP query interface of county GIS servers (<code>.../MapServer/N/query?where=...</code>).</td></tr>
+  <tr><td>Adapter</td><td>A module in <code>portals/</code> giving deterministic parcel search and statement access for one county.</td></tr>
+  <tr><td>Web research route</td><td>The path for a county without an adapter: Claude with web search and fetch returns a JSON answer. Results are unverified.</td></tr>
+  <tr><td>Verified / validated</td><td>Verified: the parcel is in the county's own records. Validated: the agency was read from the county's statement and the parcel number is on it.</td></tr>
+  <tr><td>Collector model</td><td><code>single</code> (several taxing bodies on one statement), <code>multiple</code> (a separate collector is named), <code>unknown</code> (the source does not say).</td></tr>
+  <tr><td>Manifest</td><td>The JSON list of result records from one CLI run (<code>--manifest</code>).</td></tr>
+  <tr><td>Cloudflare Turnstile</td><td>A bot challenge some portals (the <code>county-taxes</code> family) show before loading.</td></tr>
+</table>
+
+</main>
+</body>
+</html>

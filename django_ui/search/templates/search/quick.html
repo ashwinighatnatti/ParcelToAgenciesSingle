@@ -1,0 +1,20 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Quick check</h1>
+<p class="sub">Stages 1 and 2 only, answered immediately: is the address real, and which parcel is it? This works for counties with an adapter
+(Maricopa AZ, King WA). Other counties need Claude's web research, which takes minutes, so use the full search for those.</p>
+{% include "search/_search_form.html" with button="Check" %}
+
+{% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
+{% if check %}
+  <h2>1. Validate address</h2>
+  {% include "search/_check.html" %}
+{% endif %}
+{% if no_adapter %}
+  <div class="banner warn">This county has no adapter, so its parcels cannot be searched instantly. Use the <a href="{% url 'index' %}">full search</a>.</div>
+{% endif %}
+{% if parcel %}
+  <h2>2. Find / validate parcel ID and address</h2>
+  {% include "search/_parcel.html" %}
+{% endif %}
+{% endblock %}

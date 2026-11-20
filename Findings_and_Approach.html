@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parcel to Tax Agencies: Findings and Approach</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #1d2433; --muted: #5b6577; --line: #dde2ea;
+    --panel: #f5f7fa; --accent: #1f5fbf; --good: #1b7a46; --warn: #a65b00; --bad: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161d; --text: #e6e9ef; --muted: #9aa4b5; --line: #2b3342;
+      --panel: #1a2029; --accent: #7aa7f0; --good: #5cc98a; --warn: #e6a756; --bad: #ef8a83;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 1.9rem; line-height: 1.25; margin: 0 0 6px; }
+  h2 { font-size: 1.35rem; margin: 44px 0 10px; padding-top: 18px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 24px 0 6px; }
+  p, li { max-width: 72ch; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; margin: 14px 0; }
+  .box p:first-child, .box ul:first-child { margin-top: 0; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  .key { border-left: 4px solid var(--accent); }
+  .pending { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: .93rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--panel); }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  .tablewrap { overflow-x: auto; }
+  code { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; font-size: .88em; }
+  .good { color: var(--good); font-weight: 600; } .warn { color: var(--warn); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 14px 0; }
+  .step { flex: 1 1 190px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: .9rem; }
+  .step b { display: block; color: var(--accent); margin-bottom: 4px; }
+  nav ol { columns: 2; column-gap: 32px; padding-left: 20px; }
+  nav a { color: var(--accent); }
+  @media (max-width: 600px) { nav ol { columns: 1; } h1 { font-size: 1.5rem; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Parcel to Tax Agencies: Findings and Approach</h1>
+<p class="sub">Automating the identification of tax collecting agencies from a parcel address and parcel number.
+Based on the Operations sample file <code>Parcels_With_Mulitple_Agencies.xlsx</code>. Written 2026-11-16.</p>
+
+<nav class="box">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Summary</a></li>
+    <li><a href="#data">What the sample data shows</a></li>
+    <li><a href="#options">Approaches evaluated</a></li>
+    <li><a href="#design">The solution as built</a></li>
+    <li><a href="#process">How we got here: results by iteration</a></li>
+    <li><a href="#justify">Justification of each design decision</a></li>
+    <li><a href="#limits">Known limitations and risks</a></li>
+    <li><a href="#plan">Planned approach and next steps</a></li>
+    <li><a href="#decisions">Questions for Operations</a></li>
+    <li><a href="#files">Files and how to run</a></li>
+  </ol>
+</nav>
+
+<h2 id="summary">1. Summary</h2>
+<div class="box key">
+  <p><strong>Recommendation:</strong> use a hybrid pipeline. Geocode the address to get the county, then let Claude (with web search) research the property, and have Claude <em>choose from</em> that county's list of known agencies instead of writing agency names freely. Add a small data-driven rule for county "delinquent" collectors.</p>
+  <p><strong>Current result</strong> on a 50-parcel test: <span class="good">56% recall</span> (128 of 227 Operations agencies found) and <span class="good">88% precision</span> (128 of 145 returned were correct). The first, simplest version scored about 31% on both (3 parcels). The earlier 10-parcel test (58% and 86%) is consistent with the larger run.</p>
+  <p><strong>Status:</strong> the 50-parcel baseline is done. Every parcel got at least one correct agency. The remaining gap is mostly agencies the system does not return (recall), not wrong ones (precision).</p>
+</div>
+<ul>
+  <li>The sample shows <strong>ZIP code alone cannot identify the agencies</strong>, so a simple lookup table is not enough.</li>
+  <li>The agency numbers in the file <strong>encode the county</strong>, which makes it easy to restrict the candidate list once the county is known.</li>
+  <li>The best remaining gaps are <strong>special districts</strong> (MUD, WCID, management districts) and some collectors Operations adds that no public web page mentions.</li>
+</ul>
+
+<h2 id="data">2. What the sample data shows</h2>
+<div class="tablewrap"><table>
+  <tr><th>Fact</th><th class="num">Value</th></tr>
+  <tr><td>Rows in the file</td><td class="num">8,358</td></tr>
+  <tr><td>Distinct parcels</td><td class="num">1,843</td></tr>
+  <tr><td>Distinct agencies (<code>agency_number</code>)</td><td class="num">1,954</td></tr>
+  <tr><td>Distinct county codes (first 5 digits of the agency number)</td><td class="num">212</td></tr>
+  <tr><td>Most common states by rows</td><td class="num">PA 2,876 · TX 2,373 · NY 1,474 · GA 924 · MI 350</td></tr>
+  <tr><td>Parcels with exactly 4 agencies</td><td class="num">1,527 (83%)</td></tr>
+  <tr><td>Fewest agencies on any parcel</td><td class="num">4 (maximum 68)</td></tr>
+</table></div>
+
+<h3>Findings</h3>
+<ol>
+  <li><strong>ZIP does not determine the agencies.</strong> Of 561 ZIP codes, only 384 map to a single set of agencies, and those cover just 574 of the 1,843 parcels (31%). School districts and special districts cut across ZIP boundaries.</li>
+  <li><strong>Agency numbers are structured.</strong> The first two digits are the state code and the next three the county code, so <code>131210000</code> is Fulton County, GA and <code>48201xxxx</code> is anything in Harris County, TX. This is the same code the US Census uses, which is what makes geocoding useful here.</li>
+  <li><strong>Every parcel has a layered set of agencies:</strong> a county, a city or township, a school district, plus often special districts (MUD, WCID, solid waste, sewer, BID, management districts).</li>
+  <li><strong>Operations lists <em>collectors</em>, not every entity that levies a tax.</strong> A county that collects for its flood control, hospital and port districts appears once, as the county. The original <code>prompt.txt</code> asks for every entity that <em>levies</em> tax, which over-produces (see iteration 1).</li>
+  <li><strong>Some agencies exist only because of how Operations tracks delinquency</strong>: for example "Northampton County Tax Claim Bureau" or "Carbon County (Delinquent Only)", plus a law firm (Portnoff Law Associates, 133 rows). Only 58 of 212 counties have such an agency, and within those counties many parcels do not (see section 6).</li>
+  <li><strong>The names are Operations' own labels</strong>, for example <code>Atlanta City (Fulton)</code>, <code>HC MUD 163 (Harris)</code> and entries marked <code>INACTIVE</code>. Any answer from outside has to be mapped to these.</li>
+  <li><strong>Data quirks:</strong> <code>AgencyCount</code> is unreliable for large parcels; state and city casing is mixed (<code>Ny</code>, <code>ATLANTA</code>); parcel numbers contain stray spaces; 1,151 rows have no <code>tax_collector_property_number</code>.</li>
+  <li><strong>The sample is not a random cross-section.</strong> The file is named "with multiple agencies" and covers a limited set of counties, so accuracy on other counties is unproven.</li>
+</ol>
+
+<h2 id="options">3. Approaches evaluated</h2>
+<div class="tablewrap"><table>
+  <tr><th>Approach</th><th>Accuracy</th><th>Scale and cost</th><th>Effort</th><th>Verdict</th></tr>
+  <tr><td><strong>A.</strong> Lookup table from ZIP or city, built from this file</td><td class="bad">Low. ZIP fails for 69% of parcels.</td><td>Instant, free</td><td>Low</td><td>Not sufficient alone</td></tr>
+  <tr><td><strong>B.</strong> Geocode the address, then look up the agencies for the county, city, school district</td><td>High for county, city and school. Weak for special districts.</td><td>Fast, free (Census) </td><td>Medium</td><td>Good backbone. Used for the county and as hints.</td></tr>
+  <tr><td><strong>C.</strong> Claude with web search, per the starting prompt</td><td>Good for main entities. Names are free text and may not match Operations' list.</td><td>Slower, pay per call</td><td>Low</td><td>Good start, but needs a constraint on its output</td></tr>
+  <tr><td><strong>D.</strong> Scrape each county tax site by parcel number</td><td>Highest in principle</td><td>Thousands of different sites</td><td class="bad">Very high</td><td>Not now</td></tr>
+</table></div>
+<p><strong>Chosen:</strong> a hybrid of B and C, plus a small rule. Option D is the long-term route for counties that matter most, but it does not suit a first, simple solution.</p>
+
+<h2 id="design">4. The solution as built</h2>
+<div class="flow">
+  <div class="step"><b>1. Geocode</b>US Census geocoder returns county code, city, township and school district. No API key.</div>
+  <div class="step"><b>2. Research</b>Claude with web search lists the taxing entities, given the geocoded facts as anchors.</div>
+  <div class="step"><b>3. Pick</b>Claude chooses from the county's agency list (from the Excel master) and returns agency numbers only.</div>
+  <div class="step"><b>4. Rule</b>Add the county's delinquent / tax claim collectors where the data supports it.</div>
+</div>
+<ul>
+  <li>The county code from the geocoder selects the <strong>candidate list</strong>: every agency whose number starts with that code.</li>
+  <li>If the geocoder cannot find the address, the county that Claude names in step 2 is used instead.</li>
+  <li>Claude can only return numbers from the candidate list, so it <strong>cannot invent an agency</strong>.</li>
+  <li>The model runs on the Azure AI Foundry deployment configured in <code>.env</code>. The first prompt is the one from <code>prompt.txt</code> with two additions: ask for the county on the first line, and the geocoded facts.</li>
+</ul>
+
+<h2 id="process">5. How we got here: results by iteration</h2>
+<p>Each version was scored against Operations' answers: <strong>recall</strong> is the share of Operations' agencies we found; <strong>precision</strong> is the share of what we returned that Operations also lists.</p>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Version</th><th>Parcels</th><th class="num">Recall</th><th class="num">Precision</th></tr>
+  <tr><td>1</td><td>Claude names entities, fuzzy-matched to Operations' names</td><td class="num">3</td><td class="num">31% (4 of 13)</td><td class="num">31% (4 of 13)</td></tr>
+  <tr><td>2</td><td>Claude researches, then picks from the county's agency list</td><td class="num">10</td><td class="num">51% (22 of 43)</td><td class="num">76% (22 of 29)</td></tr>
+  <tr><td>3</td><td>2 + delinquent / tax claim rule</td><td class="num">10</td><td class="num">58% (25 of 43)</td><td class="num">86% (25 of 29)</td></tr>
+  <tr><td>4</td><td>3 + Census geocoding</td><td class="num">10</td><td class="num">58% (25 of 43)</td><td class="num">86% (25 of 29)</td></tr>
+  <tr><td>5</td><td>Version 4 on a larger sample (<code>run5.txt</code>)</td><td class="num">50</td><td class="num">56% (128 of 227)</td><td class="num">88% (128 of 145)</td></tr>
+</table></div>
+<h3>The 50-parcel baseline by state</h3>
+<div class="tablewrap"><table>
+  <tr><th>State</th><th class="num">Parcels</th><th class="num">Expected</th><th class="num">Found</th><th class="num">Correct</th><th class="num">Recall</th><th class="num">Precision</th></tr>
+  <tr><td>PA</td><td class="num">18</td><td class="num">81</td><td class="num">54</td><td class="num">50</td><td class="num">62%</td><td class="num">93%</td></tr>
+  <tr><td>TX</td><td class="num">15</td><td class="num">78</td><td class="num">46</td><td class="num">38</td><td class="num">49%</td><td class="num">83%</td></tr>
+  <tr><td>GA</td><td class="num">10</td><td class="num">40</td><td class="num">23</td><td class="num">22</td><td class="num">55%</td><td class="num">96%</td></tr>
+  <tr><td>NY</td><td class="num">6</td><td class="num">24</td><td class="num">20</td><td class="num">16</td><td class="num">67%</td><td class="num">80%</td></tr>
+  <tr><td>MI</td><td class="num">1</td><td class="num">4</td><td class="num">2</td><td class="num">2</td><td class="num">50%</td><td class="num">100%</td></tr>
+  <tr><td><strong>All</strong></td><td class="num">50</td><td class="num">227</td><td class="num">145</td><td class="num">128</td><td class="num">56%</td><td class="num">88%</td></tr>
+</table></div>
+<p>The geocoder failed to find the address for 6 of the 50 parcels (88% found), which then used the weaker county fallback. Texas is the weakest state, as expected, because of its many special districts. Michigan has a single parcel, so its row means little. The sample is random, so the state mix follows the file.</p>
+
+
+<h3>What each step taught us</h3>
+<ul>
+  <li><strong>Iteration 1 failed for two reasons.</strong> The prompt returns every taxing entity (flood control, port, hospital), but Operations records only collectors. And fuzzy name matching both missed true matches ("Aldine Independent School District" vs <code>Aldine ISD (Harris)</code>) and accepted wrong ones ("Grimes Central Appraisal District", "Brazoria MUD 66").</li>
+  <li><strong>Iteration 2 fixed both</strong> by giving Claude the county's list of Operations' own agencies to choose from, with an instruction about collectors. Recall rose from 31% to 51% and precision from 31% to 76%.</li>
+  <li><strong>Iteration 3</strong> added the delinquent rule. The Reading, PA parcel went from 0 to 2 correct because the Berks County delinquent collector was added.</li>
+  <li><strong>Iteration 4 (geocoding) did not change the totals on this small sample</strong>, but it changed which answers are right. The Reading parcel now gets the correct borough (Laureldale Borough, Muhlenberg School District) as Census geography says, where before it returned Muhlenberg Township. The county no longer depends on Claude guessing it. Other gains are expected to show on a larger sample and are not yet proven.</li>
+</ul>
+
+<h2 id="justify">6. Justification of each design decision</h2>
+
+<h3>Start with Claude and web search rather than a lookup table</h3>
+<p>The ZIP analysis rules out a simple table. Scraping every county site is too large for a first version. Claude with search needs no per-county code and works anywhere, so it gives the fastest route to a measurable baseline.</p>
+
+<h3>Choose from a candidate list instead of writing names</h3>
+<p>Free-text names do not match Operations' labels, and fuzzy matching was the main cause of error in iteration 1. Choosing from a fixed list guarantees every answer is a real, trackable agency, and it applies the "collectors, not every taxing entity" distinction through the instruction. The cost is that an agency missing from the sample file can never be returned (see limitations).</p>
+
+<h3>Use the geocoder for the county</h3>
+<p>The Census county code equals the first 5 digits of the agency numbers, so it selects the candidates with no matching logic. In a 30-parcel check the geocoder found <strong>21 addresses (70%)</strong>, and for <strong>all 21</strong> the county code was present in Operations' agency numbers. It is free, needs no key, and returns city, township and school district as extra facts for Claude. Addresses it misses use Claude's county as a fallback.</p>
+
+<h3>Delinquent rule with a threshold, not "always add"</h3>
+<p>Adding a county's delinquent collectors to every parcel in that county looks sensible, but the data says otherwise. We simulated it on all 1,843 parcels:</p>
+<div class="tablewrap"><table>
+  <tr><th>Rule</th><th class="num">Correct entries added</th><th class="num">Wrong entries added</th><th class="num">Share correct</th></tr>
+  <tr><td>Always add where a county has one</td><td class="num">245</td><td class="num">636</td><td class="num bad">28%</td></tr>
+  <tr><td>Only where at least 50% of that county's parcels have one (used)</td><td class="num">134</td><td class="num">46</td><td class="num warn">74%</td></tr>
+  <tr><td>Only where at least 75% have one</td><td class="num">81</td><td class="num">14</td><td class="num good">85%</td></tr>
+</table></div>
+<p>Operations has 286 delinquent entries in total. "Always add" would drag precision far below the current 76-86%, so it was rejected. The 50% cut-off balances more recall against a precision close to the baseline. For example, only 22% of Northampton County parcels carry the Tax Claim Bureau, so it is not added there.</p>
+<p class="box pending"><strong>Caveat:</strong> the cut-off is learned from this same file, so the measured gain is optimistic. It needs a proper hold-out test (see plan).</p>
+
+<h3>Keep the code small</h3>
+<p>The brief asked for simple, traceable code. Each step is one short function, there are no retry layers or catch-all error handling, and every run prints the geocoded facts, the expected agencies and the chosen agencies side by side so any answer can be traced.</p>
+
+<h2 id="limits">7. Known limitations and risks</h2>
+<ul>
+  <li><strong>Modest test size.</strong> The baseline is 50 parcels (about 3% of the 1,843), with only 1 Michigan parcel. Claude's answers also vary between runs (one parcel returned 3 agencies in one run and 1 in the next), so differences of one or two agencies are noise. The Michigan, New York and per-county figures are too thin to rely on.</li>
+  <li><strong>Special districts are the weakest area.</strong> Claude returned HC MUD 162 as well as the correct HC MUD 163, and missed Clear Lake City Water Authority and HC WCID 156 on another parcel. The Census has no MUD or WCID boundaries.</li>
+  <li><strong>The agency list comes from the sample file.</strong> An agency not in the file cannot be returned, and a county not in the file has no candidates. The file has 212 county codes, which is not nationwide.</li>
+  <li><strong>Operations' data is not always a perfect reference.</strong> For 1507 Elgin Ave the Census places the address in Houston ISD while Operations lists Spring Branch ISD. Also, entries marked <code>INACTIVE</code> appear in the expected lists. Accuracy figures are measured against Operations' answers, not against reality.</li>
+  <li><strong>Geocoder coverage is about 70%</strong> on this sample (rural routes, new streets, some FM roads). Misses use the weaker fallback.</li>
+  <li><strong>Cross-county parcels.</strong> A Chappell Hill, TX parcel lists agencies from two counties (Washington and Austin CAD). The candidate list covers one county only.</li>
+  <li><strong>Collectors Operations adds by internal practice</strong> (a law firm, "Delinquent Reporting Only" entries) cannot be found from public sources and rely on the rule.</li>
+  <li><strong>Unverified:</strong> cost and time per parcel have not been measured, and the web search tool's behaviour on the Azure deployment is only tested on a few dozen calls.</li>
+  <li><strong>Privacy:</strong> addresses are sent to the Census geocoder and to the model and its search tool. These are property addresses, but confirm this is acceptable under your data policy.</li>
+</ul>
+
+<h2 id="plan">8. Planned approach and next steps</h2>
+<div class="tablewrap"><table>
+  <tr><th>#</th><th>Step</th><th>Why</th><th>Result we want</th></tr>
+  <tr><td>1</td><td><strong>50-parcel baseline</strong> <span class="good">(done: 56% recall, 88% precision)</span>. Next, group the 99 missed agencies by type</td><td>See which kinds of agencies are missed most, to rank steps 2 to 4</td><td>A ranked list of miss types</td></tr>
+  <tr><td>2</td><td><strong>Hold-out test of the delinquent rule</strong>: learn the county shares on half the parcels and score the other half</td><td>Remove the optimism from learning and scoring on the same file</td><td>An honest gain figure, and a chosen cut-off</td></tr>
+  <tr><td>3</td><td><strong>Special districts</strong>: look for official boundary data for the large counties in the sample (for example Harris County MUD / WCID layers)</td><td>This is the largest remaining miss for Texas</td><td>Candidate narrowing for MUD and WCID</td></tr>
+  <tr><td>4</td><td><strong>Neighbouring-county candidates</strong> when the address is near a county line or a school district crosses counties</td><td>Fixes cross-county misses like the CAD cases</td><td>Fewer zero-recall parcels</td></tr>
+  <tr><td>5</td><td><strong>Cache by parcel number and run in batches</strong></td><td>8,358 rows repeat just 1,843 parcels. Fewer calls, lower cost</td><td>Measured cost and time per parcel</td></tr>
+  <tr><td>6</td><td><strong>Add a confidence flag</strong>: parcels where the geocoder failed or the picks look thin go to a human review queue</td><td>Trust: Operations sees which answers to check</td><td>Auto-accept rate vs. review rate</td></tr>
+  <tr><td>7</td><td><strong>Decide on the agency master</strong> for counties outside the sample (see questions)</td><td>Without it the approach cannot leave the sampled counties</td><td>A maintained agency list</td></tr>
+</table></div>
+<p><strong>Decision point:</strong> recall held near 56% on 50 parcels, so the remaining gap is mostly special districts and Operations-specific entries. The best investment is steps 2, 3 and 6 together (an honest rule test, better boundaries, human review). Texas is the first state to improve (49% recall).</p>
+
+<h2 id="decisions">9. Questions for Operations</h2>
+<ol>
+  <li>Is the agency list in this file the complete, current master? If not, can we have the full list, including which entries are <code>INACTIVE</code>?</li>
+  <li>When is a "Delinquent Only" or "Tax Claim Bureau" agency attached to a parcel? Is it tied to the parcel being delinquent, to the county, or to the client? Knowing this would replace the statistical rule.</li>
+  <li>How should the Portnoff Law Associates entry be treated? It appears on 133 rows and cannot be found by research.</li>
+  <li>Which accuracy would be good enough to use without a human check, and should missing an agency or adding a wrong one cost more?</li>
+  <li>Which states and counties matter most for the first release?</li>
+</ol>
+
+<h2 id="files">10. Files and how to run</h2>
+<div class="tablewrap"><table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td><code>agencies.py</code></td><td>Loads the Excel file, builds the agency list and the ground truth, and computes the delinquent rule</td></tr>
+  <tr><td><code>geocode.py</code></td><td>Census geocoder call: county code, city, township, school district</td></tr>
+  <tr><td><code>agent.py</code></td><td>The prompts, the Claude calls, and the full pipeline (<code>find_agencies</code>)</td></tr>
+  <tr><td><code>evaluate.py</code></td><td>Runs a sample of parcels and prints expected vs. found agencies with recall and precision, and a total line</td></tr>
+  <tr><td><code>run2.txt</code> to <code>run5.txt</code></td><td>Saved evaluation output for versions 2 to 5</td></tr>
+  <tr><td><code>README.md</code></td><td>Short summary of the above</td></tr>
+</table></div>
+<p>Run with: <code>python evaluate.py 10</code> (credentials are read from <code>.env</code>). The full set of evaluation outputs is the audit trail for every number in this document.</p>
+
+</main>
+</body>
+</html>

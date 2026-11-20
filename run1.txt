@@ -1,0 +1,15 @@
+  expected    : ['Aldine ISD (Harris)', 'Fallbrook UD (Harris)', 'Harris County', 'North Houston District', 'North Houston District (Harris)']
+  matched to  : ['Grimes Central Appraisal District', 'Harris County', 'Harris County ID 9 Personal Property', 'Lee Jr College Dstrict (Harris)', 'North Houston District']
+10241-10275 NORTH FREEWAY, HOUSTON, TX | parcel 1176470010007
+  Claude said : ['Harris County', 'Harris County Flood Control District', 'Port of Houston Authority', 'Harris County Hospital District', 'Harris County Department of Education', 'City of Houston', 'Aldine Independent School District (Aldine ISD)', 'Lone Star College System District']
+  expected 5, found 5, correct 2  (recall 40%, precision 40%)
+  expected    : ['Harris County', 'Midtown Management District  (Harris)', 'Spring Branch ISD (Harris)', 'Spring Branch Management District (Harris)']
+  matched to  : ['Harris County', 'Harris County Personal Property (Harris)', 'North Houston District']
+1507 ELGIN AVE, HOUSTON, TX | parcel 1355270010003
+  Claude said : ['Taxing Jurisdictions for 1507 Elgin Ave, Houston, TX (Parcel 1355270010003)', '1. **Houston ISD (Independent School District)', '2. **Harris County', '3. **Harris County Flood Control District', '4. **Port of Houston Authority', '5. **Harris County Hospital District** (Harris Health)', '6. **Harris County Department of Education', '7. **Houston Community College System** (Houston City College)', '8. **City of Houston']
+  expected 4, found 3, correct 1  (recall 25%, precision 33%)
+  expected    : ['Cypress-Fairbanks ISD (Harris)', 'HC MUD 163 (Harris)', 'HC WCID 145 (Harris)', 'Harris County']
+  matched to  : ['Brazoria County Municipal Utility District # 66', 'Harris County', 'Harris County ID 9 Personal Property', 'Harris County Personal Property (Harris)', 'North Houston District']
+8559 SPRING GREEN DR, HOUSTON, TX | parcel 1153850430041
+  Claude said : ['Cypress-Fairbanks Independent School District (Cy-Fair ISD)', 'Harris County', 'Harris County Flood Control District', 'Harris County Hospital District (Harris Health)', 'Port of Houston Authority', 'Lone Star College System', 'Harris County Municipal Utility District (MUD) No. 162', 'Harris County Emergency Services District']
+  expected 4, found 5, correct 1  (recall 25%, precision 20%)

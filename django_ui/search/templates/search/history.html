@@ -1,0 +1,17 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>History</h1>
+<p class="sub">The last 50 searches. Results are kept in the local database.</p>
+{% if searches %}
+<div class="tablewrap"><table>
+  <tr><th>Started (UTC)</th><th>Search</th><th>Status</th></tr>
+  {% for s in searches %}
+  <tr>
+    <td>{{ s.created|date:"Y-m-d H:i" }}</td>
+    <td><a href="{% url 'job' s.pk %}">{{ s.title }}</a></td>
+    <td>{% if s.status == "done" and not s.is_batch %}{{ s.results.0.status }}{% elif s.status == "done" %}{{ s.results|length }} searches{% else %}{{ s.status }}{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<p class="note">No searches yet.</p>{% endif %}
+{% endblock %}

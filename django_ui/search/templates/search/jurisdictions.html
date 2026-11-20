@@ -1,0 +1,14 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Jurisdictions</h1>
+<p class="sub">The 51-jurisdiction reference file ({{ single_count }} of {{ total }} marked single-collector). It is used only by the state ranking; the search itself does not use it.
+A draft classification that Operations should validate.</p>
+<p>{% if only_single %}<a href="?">Show all</a>{% else %}<a href="?single=1">Show only single-collector states</a>{% endif %}</p>
+<div class="tablewrap"><table>
+  <tr><th>State</th><th>Name</th><th>Single collector</th><th>Collector level</th><th>Confidence</th><th>Notes</th></tr>
+  {% for r in rows %}
+  <tr><td>{{ r.state }}</td><td>{{ r.name }}</td><td>{{ r.is_single_collector|yesno:"yes,no" }}</td>
+      <td>{{ r.primary_collector_level|default:"" }}</td><td>{{ r.confidence }}</td><td>{{ r.notes }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

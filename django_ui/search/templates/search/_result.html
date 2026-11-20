@@ -1,0 +1,20 @@
+{% load search_extras %}
+<div class="banner {{ result.status|status_tone }}"><strong>{{ result.status }}</strong>: {{ result.status|status_help }}</div>
+{% if result.status == "error" %}
+  <p class="bad">{{ result.reason }}</p>
+{% else %}
+  <section class="stage"><h3>1. Validate address</h3>{% include "search/_check.html" with check=result.address_validation %}</section>
+  <section class="stage"><h3>2. Find / validate parcel ID and address</h3>{% include "search/_parcel.html" with parcel=result.parcel %}</section>
+  <section class="stage"><h3>3. Find / validate agency</h3>{% include "search/_agency.html" with agency=result.agency %}</section>
+  {% include "search/_confidence_cost.html" %}
+  {% include "search/_trajectory.html" %}
+  <section class="stage"><h3>Tax bill</h3>
+    {% if result.tax_bill.available %}
+      <p>Available for tax year {{ result.tax_bill.tax_year }}. <a class="button" href="{{ result.tax_bill.file_path|pdf_url }}">Open the bill PDF</a></p>
+    {% else %}
+      <p class="note">Not available. {{ result.tax_bill.reason }}</p>
+    {% endif %}
+  </section>
+  {% for flag in result.flags %}<p class="warn">{{ flag }}</p>{% endfor %}
+  <details><summary>Full JSON result</summary><pre>{{ result|pretty }}</pre></details>
+{% endif %}

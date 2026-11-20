@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Single-collector pipeline{% endblock %}</title>
+<style>
+  :root{--bg:#fff;--text:#1d2433;--muted:#5b6577;--line:#dde2ea;--panel:#f5f7fa;--accent:#1f5fbf;--good:#1b7a46;--warn:#a65b00;--bad:#b3261e;--code:#eef1f6;--btn:#1f5fbf;--btntext:#fff}
+  @media (prefers-color-scheme: dark){:root{--bg:#12161d;--text:#e6e9ef;--muted:#9aa4b5;--line:#2b3342;--panel:#1a2029;--accent:#7aa7f0;--good:#5cc98a;--warn:#e6a756;--bad:#ef8a83;--code:#222a36;--btn:#7aa7f0;--btntext:#12161d}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}
+  header{border-bottom:1px solid var(--line);background:var(--panel)}
+  header div{max-width:1040px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline}
+  header strong{font-size:1.05rem;margin-right:8px}
+  header a{color:var(--muted);text-decoration:none;padding:2px 0;border-bottom:2px solid transparent}
+  header a:hover,header a.on{color:var(--text);border-bottom-color:var(--accent)}
+  main{max-width:1040px;margin:0 auto;padding:24px 16px 80px}
+  h1{font-size:1.6rem;margin:0 0 4px}h2{font-size:1.25rem;margin:26px 0 8px}h3{font-size:1.05rem;margin:22px 0 6px}
+  .sub{color:var(--muted);margin:0 0 16px;max-width:80ch}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin:12px 0}
+  .banner{border-radius:8px;padding:10px 14px;margin:12px 0;border:1px solid var(--line);border-left:5px solid}
+  .banner.good{border-left-color:var(--good)}.banner.warn{border-left-color:var(--warn)}.banner.bad{border-left-color:var(--bad)}
+  .good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}.note{color:var(--muted)}
+  .banner.good,.banner.warn,.banner.bad{color:var(--text)}
+  label{display:block;font-weight:600;margin:12px 0 3px}
+  input[type=text],textarea,input[type=file]{width:100%;max-width:560px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--text);font:inherit}
+  ul.radios{list-style:none;padding:0;margin:4px 0;display:flex;flex-wrap:wrap;gap:6px 20px}
+  ul.radios label{display:inline;font-weight:400}
+  button,.button{display:inline-block;background:var(--btn);color:var(--btntext);border:0;border-radius:6px;padding:8px 16px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;margin-top:14px}
+  button.small{padding:3px 10px;margin:0;font-size:.85rem}
+  .errorlist{color:var(--bad);list-style:none;padding:0;margin:3px 0}
+  table{border-collapse:collapse;width:100%;margin:10px 0;font-size:.9rem}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}th{background:var(--panel)}
+  .tablewrap{overflow-x:auto}
+  dl{display:grid;grid-template-columns:max-content 1fr;gap:3px 16px;margin:8px 0}dt{color:var(--muted)}dd{margin:0}
+  code,pre{background:var(--code);border-radius:4px;font-size:.85em}code{padding:1px 5px}pre{padding:10px 12px;overflow-x:auto}
+  details{margin:10px 0}summary{cursor:pointer;color:var(--accent)}
+  section.stage{border-left:3px solid var(--line);padding-left:14px;margin:8px 0}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (max-width:640px){dl{grid-template-columns:1fr}dt{margin-top:6px}}
+</style>
+</head>
+<body>
+<header><div>
+  <strong>Single-collector pipeline</strong>
+  <a href="{% url 'index' %}" {% if request.resolver_match.url_name == 'index' %}class="on"{% endif %}>Search</a>
+  <a href="{% url 'quick' %}" {% if request.resolver_match.url_name == 'quick' %}class="on"{% endif %}>Quick check</a>
+  <a href="{% url 'batch' %}" {% if request.resolver_match.url_name == 'batch' %}class="on"{% endif %}>Batch</a>
+  <a href="{% url 'triage' %}" {% if request.resolver_match.url_name == 'triage' %}class="on"{% endif %}>Triage</a>
+  <a href="{% url 'triage_jev' %}" {% if request.resolver_match.url_name == 'triage_jev' %}class="on"{% endif %}>Triage-Jev</a>
+  <a href="{% url 'history' %}" {% if request.resolver_match.url_name == 'history' %}class="on"{% endif %}>History</a>
+  <a href="{% url 'rank' %}" {% if request.resolver_match.url_name == 'rank' %}class="on"{% endif %}>Rank states</a>
+  <a href="{% url 'jurisdictions' %}" {% if request.resolver_match.url_name == 'jurisdictions' %}class="on"{% endif %}>Jurisdictions</a>
+</div></header>
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

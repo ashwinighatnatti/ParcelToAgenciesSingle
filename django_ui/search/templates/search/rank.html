@@ -1,0 +1,18 @@
+{% extends "search/base.html" %}
+{% block content %}
+<h1>Rank states</h1>
+<p class="sub">The states where one office collects the property tax, easiest first: confidence in the classification, then how many of the
+state's largest counties hold 80% of its housing units (fewer portals to cover is easier). County data is fetched live from the Census, so this takes a few seconds.</p>
+<form method="post">{% csrf_token %}<button type="submit">{% if tiers %}Refresh{% else %}Rank states{% endif %}</button></form>
+{% if error %}<div class="banner bad">{{ error }}</div>{% endif %}
+{% for label, rows in tiers %}
+  <h2>{{ label }}</h2>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>State</th><th>Counties</th><th>Portals for 80% of homes</th><th>Largest counties</th><th>Adapter counties</th><th>Blocked</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r.rank }}</td><td>{{ r.name }}</td><td>{{ r.counties }}</td><td>{{ r.portals_for_80pct_of_homes }}</td>
+        <td>{{ r.largest_counties|join:", " }}</td><td>{{ r.scripted_counties|join:", " }}</td><td>{{ r.blocked|join:", " }}</td></tr>
+    {% endfor %}
+  </table></div>
+{% endfor %}
+{% endblock %}

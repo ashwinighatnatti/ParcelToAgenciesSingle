@@ -1,0 +1,20 @@
+# secrets
+.env
+.env_*
+!.env.example
+*.env
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# generated at run time
+django_ui/db.sqlite3
+downloads/
+output/
+*.log
+*.err
+scratch_*
+single_collector/test_run*.json
+single_collector/*result download.pdf
+.claude/
