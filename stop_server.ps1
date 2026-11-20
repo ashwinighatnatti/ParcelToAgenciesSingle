@@ -40,7 +40,7 @@ Write-Host "Cleaning up..."
 Get-ChildItem $root -Recurse -Directory -Filter __pycache__ -Force -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch '\\\.venv\\' } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-Get-ChildItem $root -File -Include *.log, *.err -Force -ErrorAction SilentlyContinue |
+Get-ChildItem (Join-Path $root "*") -File -Include *.log, *.err -Force -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 Write-Host "  removed __pycache__ folders and server logs"
 
